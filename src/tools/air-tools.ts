@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AirGradientClient, aqiBand, type AirReading } from "../services/airgradient-client.js";
 import { AirThingsClient } from "../services/airthings-client.js";
+import { PurpleAirClient } from "../services/purpleair-client.js";
 import { buildAgentManifest } from "../services/agent-manifest.js";
 import { buildCapabilities } from "../services/capabilities.js";
 import { buildPrivacyAudit } from "../services/privacy-audit.js";
@@ -182,12 +183,39 @@ export function registerAirTools(server: McpServer): void {
           return jsonResponse({ ok: false, error: "airthings_error", provider: "airthings", message: (err as Error).message });
         }
       }
+      if (chosen === "purpleair") {
+        const pa = new PurpleAirClient();
+        if (!pa.hasAuth()) {
+          return jsonResponse({
+            ok: false,
+            error: "missing_credentials",
+            provider: "purpleair",
+            hint: "Set PURPLEAIR_API_KEY (free read-only key at https://develop.purpleair.com).",
+          });
+        }
+        try {
+          const reading = await pa.getSensor(loc);
+          if (!reading) {
+            return jsonResponse({ ok: false, error: "not_found", provider: "purpleair", locationId: loc });
+          }
+          return jsonResponse({
+            ok: true,
+            provider: "purpleair",
+            locationId: loc,
+            reading,
+            summary: summarizeReading(reading),
+            band: reading.aqi !== undefined ? aqiBand(reading.aqi) : undefined,
+          });
+        } catch (err) {
+          return jsonResponse({ ok: false, error: "purpleair_error", provider: "purpleair", message: (err as Error).message });
+        }
+      }
       if (chosen !== "airgradient") {
         return jsonResponse({
           ok: false,
           error: "provider_not_implemented",
           provider: chosen,
-          hint: `v0.3 ships airgradient + airthings. Remaining roadmap: ${SUPPORTED_PROVIDERS.filter((p) => p !== "airgradient" && p !== "airthings").join(", ")}.`,
+          hint: `v0.4 ships airgradient + airthings + purpleair. Remaining roadmap: ${SUPPORTED_PROVIDERS.filter((p) => p !== "airgradient" && p !== "airthings" && p !== "purpleair").join(", ")}.`,
         });
       }
       const client = new AirGradientClient();

@@ -6,6 +6,17 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-10
+
+### Added
+
+- **PurpleAir adapter** — third provider live. PurpleAir public-sensor reads via API key (`PURPLEAIR_API_KEY`). Maps PM2.5/PM10/temperature/humidity to the shared `AirReading` shape. Temperature converted from °F to °C automatically.
+- `air_current_reading` now routes to PurpleAir when `provider: "purpleair"` (sensorIndex from https://map.purpleair.com).
+
+### Roadmap
+
+IQAir AirVisual + Awair adapters land in v0.5.
+
 ## [0.3.0] - 2026-05-10
 
 ### Added
