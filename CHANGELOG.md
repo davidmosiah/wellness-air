@@ -6,6 +6,20 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-10
+
+### Added
+
+- `air_quickstart` tool — returns a personalized 3-step setup walkthrough based on the agent's current configuration (location set? owned token? what's left?). Use this first when the user asks "how do I set this up?"
+- `air_demo` tool — returns a realistic example payload of `air_current_reading` + `air_aqi_check` + `air_daily_summary` so agents see the contract before any real call.
+- `doctor` CLI command now returns a `recommendations[]` array with concrete next-step guidance when something is missing.
+- `air_search_public_sensors` returns curated example sensors plus the AirGradient map URL.
+
+### Changed
+
+- `recommended_first_calls` on the agent manifest now leads with `air_quickstart`.
+- Tool count: 10 → 12.
+
 ## [0.1.0] - 2026-05-10
 
 ### Added

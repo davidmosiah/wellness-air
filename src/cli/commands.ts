@@ -75,6 +75,7 @@ async function doctor(): Promise<number> {
       detail: caps.configured.length === 0 ? "none (public AirGradient still works)" : caps.configured.join(", "),
     },
   ];
+  const recommendations: string[] = [];
   const loc = process.env.WELLNESS_AIR_DEFAULT_LOCATION ?? process.env.AIRGRADIENT_LOCATION_ID;
   if (loc) {
     try {
@@ -87,15 +88,26 @@ async function doctor(): Promise<number> {
           ? `aqi=${reading.aqi ?? "?"} band=${reading.aqi !== undefined ? aqiBand(reading.aqi) : "?"} pm25=${reading.pm25 ?? "?"}`
           : "no reading",
       });
+      if (!reading) {
+        recommendations.push(
+          `Sensor '${loc}' returned no reading. Check the location id is correct at https://www.airgradient.com/map/ — copy from the URL.`,
+        );
+      }
     } catch (err) {
       checks.push({ name: "airgradient_reach", ok: false, detail: (err as Error).message });
+      recommendations.push(`AirGradient API call failed: ${(err as Error).message}`);
     }
   } else {
     checks.push({
       name: "airgradient_reach",
       ok: false,
-      detail: "set WELLNESS_AIR_DEFAULT_LOCATION to test connectivity (any AirGradient public location id, e.g. 654321).",
+      detail: "no location configured",
     });
+    recommendations.push(
+      "Open https://www.airgradient.com/map/, click any public sensor near you, and copy the locationId from the URL.",
+      "Set WELLNESS_AIR_DEFAULT_LOCATION=<that_id> in your env or MCP client config.",
+      "Re-run `wellness-air doctor` to verify connectivity.",
+    );
   }
   const ok = checks.every((c) => c.ok);
   console.log(
@@ -106,6 +118,7 @@ async function doctor(): Promise<number> {
         version: SERVER_VERSION,
         privacy: buildPrivacyAudit(),
         checks,
+        recommendations,
       },
       null,
       2,

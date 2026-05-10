@@ -10,6 +10,8 @@ const EXPECTED_TOOLS = new Set([
   "air_connection_status",
   "air_privacy_audit",
   "air_data_inventory",
+  "air_quickstart",
+  "air_demo",
   "air_current_reading",
   "air_aqi_check",
   "air_daily_summary",
@@ -71,6 +73,18 @@ const readingPayload = JSON.parse(reading.content[0].text);
 assert.equal(readingPayload.ok, false, "current reading without location should report ok=false");
 assert.equal(readingPayload.error, "missing_location");
 console.log("✓ air_current_reading without location returns missing_location");
+
+const quickstart = JSON.parse((await client.callTool({ name: "air_quickstart", arguments: {} })).content[0].text);
+assert.equal(quickstart.ok, true);
+assert.ok(Array.isArray(quickstart.steps) && quickstart.steps.length === 3, `expected 3 steps, got ${quickstart.steps?.length}`);
+assert.ok(quickstart.next, "quickstart should suggest a next step");
+console.log(`✓ air_quickstart returns 3-step walkthrough (next: '${quickstart.next.title}')`);
+
+const demo = JSON.parse((await client.callTool({ name: "air_demo", arguments: {} })).content[0].text);
+assert.equal(demo.is_demo, true);
+assert.ok(demo.sample.air_current_reading, "demo should include air_current_reading sample");
+assert.ok(demo.sample.air_aqi_check, "demo should include air_aqi_check sample");
+console.log(`✓ air_demo returns sample payloads`);
 
 await client.close();
 console.log("\nall smoke checks passed.");

@@ -12,6 +12,8 @@ const TOOLS = [
   "air_connection_status",
   "air_privacy_audit",
   "air_data_inventory",
+  "air_quickstart",
+  "air_demo",
   "air_current_reading",
   "air_daily_summary",
   "air_aqi_check",
@@ -20,8 +22,8 @@ const TOOLS = [
 ] as const;
 
 const RECOMMENDED_FIRST_CALLS = [
+  "air_quickstart",
   "air_connection_status",
-  "air_capabilities",
   "air_current_reading",
 ];
 

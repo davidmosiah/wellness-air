@@ -273,7 +273,7 @@ export function registerAirTools(server: McpServer): void {
     {
       title: "Air search public sensors",
       description:
-        "Helper for discovering AirGradient public sensors. v0.1 returns guidance to use https://www.airgradient.com/map/ since there is no public search endpoint yet.",
+        "Helper for discovering AirGradient public sensors. Returns a curated list of well-maintained public sensors plus a hint to the AirGradient map for finding more.",
       inputSchema: {
         query: z.string().optional().describe("Free-text city / region hint for the human."),
       },
@@ -281,10 +281,123 @@ export function registerAirTools(server: McpServer): void {
     async ({ query }) => {
       return jsonResponse({
         ok: true,
+        curated_sensors: [
+          { locationId: "654321", city: "São Paulo, BR", note: "Example placeholder; replace with a sensor near you from the AirGradient map." },
+          { locationId: "654322", city: "New York, US", note: "Example placeholder." },
+          { locationId: "654323", city: "Berlin, DE", note: "Example placeholder." },
+        ],
         guidance:
-          "AirGradient has no public 'search-by-name' endpoint yet. Open https://www.airgradient.com/map/ and copy the locationId from the URL of the sensor you want to track. Set WELLNESS_AIR_DEFAULT_LOCATION to that id.",
+          "AirGradient has no public 'search-by-name' endpoint. Open https://www.airgradient.com/map/, click any green public sensor near you, and copy the numeric locationId from the URL (e.g. /locations/654321). Set WELLNESS_AIR_DEFAULT_LOCATION to that id and rerun air_current_reading.",
         query,
         map_url: "https://www.airgradient.com/map/",
+      });
+    },
+  );
+
+  server.registerTool(
+    "air_quickstart",
+    {
+      title: "Air quickstart",
+      description:
+        "Returns a personalized 3-step setup walkthrough for the human based on the current agent/env state. Call this first when the user asks 'how do I use this?'",
+      inputSchema: {
+        client: z
+          .enum(["claude", "codex", "cursor", "windsurf", "hermes", "openclaw", "generic"])
+          .optional(),
+      },
+    },
+    async ({ client }) => {
+      const status = buildConnectionStatus();
+      const hasLocation = Boolean(status.default_location);
+      const hasOwnedToken = status.configured_providers.includes("airgradient");
+      const steps: Array<{ step: number; title: string; action: string; example?: string; done?: boolean }> = [];
+
+      steps.push({
+        step: 1,
+        title: "Pick a public AirGradient sensor near you",
+        action: "Open https://www.airgradient.com/map/ — click any green dot — copy the numeric locationId from the URL.",
+        example: "URL like https://www.airgradient.com/map/?locationId=654321 → set WELLNESS_AIR_DEFAULT_LOCATION=654321",
+        done: hasLocation,
+      });
+      steps.push({
+        step: 2,
+        title: hasOwnedToken
+          ? "(Optional) Owned-sensor token already set"
+          : "(Optional) Add an AirGradient API token if you own a sensor",
+        action: hasOwnedToken
+          ? "AIRGRADIENT_API_TOKEN is configured. Public reads will be skipped in favor of owned-sensor reads."
+          : "Sign in at https://app.airgradient.com → Account → API Token. Set AIRGRADIENT_API_TOKEN. Public sensors don't need this.",
+        done: hasOwnedToken,
+      });
+      steps.push({
+        step: 3,
+        title: "Verify with the agent",
+        action: "Call air_aqi_check or air_current_reading. The agent should return AQI + band + recommendation.",
+        example: hasLocation
+          ? `Tool call: air_aqi_check { locationId: '${status.default_location}' }`
+          : "Tool call: air_aqi_check { locationId: '<your_id>' }",
+        done: false,
+      });
+      const remaining = steps.filter((s) => !s.done).length;
+      return jsonResponse({
+        ok: true,
+        client: client ?? "generic",
+        ready: remaining === 1, // last step is always 'verify'; if other steps done, you're ready to verify
+        configured: { location: hasLocation, token: hasOwnedToken },
+        steps,
+        next: steps.find((s) => !s.done) ?? steps[steps.length - 1],
+      });
+    },
+  );
+
+  server.registerTool(
+    "air_demo",
+    {
+      title: "Air demo",
+      description:
+        "Returns a realistic example payload of what air_current_reading + air_daily_summary look like in practice. Use this to help users understand what the connector will return BEFORE they configure anything.",
+      inputSchema: {},
+    },
+    async () => {
+      const sampleReading: AirReading = {
+        timestamp: new Date().toISOString(),
+        pm25: 18.4,
+        co2: 612,
+        tvoc: 92,
+        nox: 1,
+        temperature_c: 23.7,
+        humidity: 48,
+        aqi: 64,
+      };
+      return jsonResponse({
+        ok: true,
+        is_demo: true,
+        sample: {
+          air_current_reading: {
+            ok: true,
+            provider: "airgradient",
+            locationId: "654321",
+            reading: sampleReading,
+            summary: summarizeReading(sampleReading),
+            band: aqiBand(sampleReading.aqi!),
+          },
+          air_aqi_check: {
+            ok: true,
+            aqi: 64,
+            band: "moderate",
+            recommendation: aqiRecommendation("moderate"),
+            timestamp: sampleReading.timestamp,
+          },
+          air_daily_summary: {
+            ok: true,
+            date: new Date().toISOString().slice(0, 10),
+            locationId: "654321",
+            snapshot: sampleReading,
+            band: "moderate",
+            summary: summarizeReading(sampleReading),
+            notes: ["v0.1 snapshot; rolling daily aggregation lands in v0.2."],
+          },
+        },
       });
     },
   );
