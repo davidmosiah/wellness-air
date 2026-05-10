@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { AirGradientClient, aqiBand, type AirReading } from "../services/airgradient-client.js";
+import { AirThingsClient } from "../services/airthings-client.js";
 import { buildAgentManifest } from "../services/agent-manifest.js";
 import { buildCapabilities } from "../services/capabilities.js";
 import { buildPrivacyAudit } from "../services/privacy-audit.js";
@@ -154,12 +155,39 @@ export function registerAirTools(server: McpServer): void {
           hint: "Pass locationId or set WELLNESS_AIR_DEFAULT_LOCATION (AirGradient public location id).",
         });
       }
+      if (chosen === "airthings") {
+        const at = new AirThingsClient();
+        if (!at.hasAuth()) {
+          return jsonResponse({
+            ok: false,
+            error: "missing_credentials",
+            provider: "airthings",
+            hint: "Set AIRTHINGS_CLIENT_ID and AIRTHINGS_CLIENT_SECRET (Consumer API client_credentials). Sign in at https://dashboard.airthings.com → API.",
+          });
+        }
+        try {
+          const reading = await at.getLatestSamples(loc);
+          if (!reading) {
+            return jsonResponse({ ok: false, error: "not_found", provider: "airthings", locationId: loc });
+          }
+          return jsonResponse({
+            ok: true,
+            provider: "airthings",
+            locationId: loc,
+            reading,
+            summary: summarizeReading(reading),
+            band: reading.aqi !== undefined ? aqiBand(reading.aqi) : undefined,
+          });
+        } catch (err) {
+          return jsonResponse({ ok: false, error: "airthings_error", provider: "airthings", message: (err as Error).message });
+        }
+      }
       if (chosen !== "airgradient") {
         return jsonResponse({
           ok: false,
           error: "provider_not_implemented",
           provider: chosen,
-          hint: `In v0.1 only AirGradient is implemented. Roadmap: ${SUPPORTED_PROVIDERS.filter((p) => p !== "airgradient").join(", ")}.`,
+          hint: `v0.3 ships airgradient + airthings. Remaining roadmap: ${SUPPORTED_PROVIDERS.filter((p) => p !== "airgradient" && p !== "airthings").join(", ")}.`,
         });
       }
       const client = new AirGradientClient();
@@ -175,6 +203,54 @@ export function registerAirTools(server: McpServer): void {
         summary: summarizeReading(reading),
         band: reading.aqi !== undefined ? aqiBand(reading.aqi) : undefined,
       });
+    },
+  );
+
+  server.registerTool(
+    "air_list_devices",
+    {
+      title: "Air list devices",
+      description:
+        "Lists devices owned by the configured provider account. v0.3 supports AirThings (requires AIRTHINGS_CLIENT_ID/SECRET). For AirGradient owned sensors use air_search_public_sensors instead.",
+      inputSchema: {
+        provider: z.enum(SUPPORTED_PROVIDERS).optional(),
+      },
+    },
+    async ({ provider }) => {
+      const chosen = provider ?? "airthings";
+      if (chosen !== "airthings") {
+        return jsonResponse({
+          ok: false,
+          error: "provider_not_supported_for_listing",
+          provider: chosen,
+          hint:
+            chosen === "airgradient"
+              ? "Use air_search_public_sensors or open https://www.airgradient.com/map/ for the public list."
+              : `Device listing not implemented for ${chosen} yet.`,
+        });
+      }
+      const at = new AirThingsClient();
+      if (!at.hasAuth()) {
+        return jsonResponse({
+          ok: false,
+          error: "missing_credentials",
+          hint: "Set AIRTHINGS_CLIENT_ID and AIRTHINGS_CLIENT_SECRET.",
+        });
+      }
+      try {
+        const devices = await at.listDevices();
+        return jsonResponse({
+          ok: true,
+          provider: "airthings",
+          count: devices.length,
+          devices,
+          next: devices.length > 0
+            ? `Pick a serialNumber and call air_current_reading { provider: 'airthings', locationId: '${devices[0].serialNumber}' }.`
+            : "No devices found on this AirThings account.",
+        });
+      } catch (err) {
+        return jsonResponse({ ok: false, error: "airthings_error", message: (err as Error).message });
+      }
     },
   );
 

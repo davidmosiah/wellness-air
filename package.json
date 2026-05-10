@@ -1,6 +1,6 @@
 {
   "name": "wellness-air",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local-first air quality MCP for AI agents — AirGradient (open hardware), AirThings, PurpleAir, IQAir AirVisual, Awair. Correlate AQI with sleep, recovery, and wellness.",
   "license": "MIT",
   "type": "module",

@@ -17,6 +17,7 @@ const EXPECTED_TOOLS = new Set([
   "air_daily_summary",
   "air_compare_locations",
   "air_search_public_sensors",
+  "air_list_devices",
 ]);
 
 const transport = new StdioClientTransport({
@@ -85,6 +86,22 @@ assert.equal(demo.is_demo, true);
 assert.ok(demo.sample.air_current_reading, "demo should include air_current_reading sample");
 assert.ok(demo.sample.air_aqi_check, "demo should include air_aqi_check sample");
 console.log(`✓ air_demo returns sample payloads`);
+
+// air_list_devices without AIRTHINGS_CLIENT_ID should return missing_credentials cleanly
+const listAirthings = JSON.parse(
+  (await client.callTool({ name: "air_list_devices", arguments: { provider: "airthings" } })).content[0].text,
+);
+assert.equal(listAirthings.ok, false);
+assert.equal(listAirthings.error, "missing_credentials");
+console.log(`✓ air_list_devices reports missing_credentials when AIRTHINGS_CLIENT_ID absent`);
+
+// air_current_reading with airthings provider but no creds should report missing_credentials
+const airthingsRead = JSON.parse(
+  (await client.callTool({ name: "air_current_reading", arguments: { provider: "airthings", locationId: "2960123456" } })).content[0].text,
+);
+assert.equal(airthingsRead.ok, false);
+assert.equal(airthingsRead.error, "missing_credentials");
+console.log(`✓ air_current_reading routes to AirThings client when provider=airthings`);
 
 await client.close();
 console.log("\nall smoke checks passed.");

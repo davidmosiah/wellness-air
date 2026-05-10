@@ -19,6 +19,7 @@ const TOOLS = [
   "air_aqi_check",
   "air_compare_locations",
   "air_search_public_sensors",
+  "air_list_devices",
 ] as const;
 
 const RECOMMENDED_FIRST_CALLS = [

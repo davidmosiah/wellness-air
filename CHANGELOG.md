@@ -6,6 +6,23 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-10
+
+### Added
+
+- **AirThings adapter** — full Consumer API client (OAuth 2.0 client_credentials flow). Maps AirThings samples (PM2.5, PM10, CO₂, VOC, temperature, humidity) to the shared `AirReading` shape. AQI computed from PM2.5 via the same US EPA formula.
+- `air_list_devices` tool — lists owned AirThings devices with serial numbers; agents pick one and pass it as `locationId` to `air_current_reading`.
+- `air_current_reading` now accepts `provider: "airthings"` and routes to the AirThings client.
+
+### Changed
+
+- Tool count: 12 → 13.
+- Capabilities now report `airthings` as configured when both `AIRTHINGS_CLIENT_ID` and `AIRTHINGS_CLIENT_SECRET` are set.
+
+### Roadmap
+
+PurpleAir, IQAir AirVisual, Awair adapters land in v0.4.
+
 ## [0.2.0] - 2026-05-10
 
 ### Added
