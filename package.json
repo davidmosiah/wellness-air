@@ -68,8 +68,7 @@
   },
   "mcpName": "io.github.davidmosiah/wellness-air",
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "main": "dist/index.js"
 }
