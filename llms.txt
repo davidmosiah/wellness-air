@@ -1,0 +1,46 @@
+# Wellness Air
+
+Local-first air-quality MCP for AI agents. v0.1 ships first-class AirGradient support (12,000+ public sensors, no auth required). AirThings, PurpleAir, IQAir AirVisual, and Awair are scaffolded for v0.2.
+
+Repository: https://github.com/davidmosiah/wellness-air
+NPM: https://www.npmjs.com/package/wellness-air
+Docs: https://wellness.delx.ai/connectors/air
+Primary command: npx -y wellness-air doctor
+MCP command: wellness-air-mcp
+
+Core tools (10):
+- air_agent_manifest — runtime contract, tool list, supported clients, env vars
+- air_capabilities — providers, metrics, privacy modes
+- air_connection_status — health + warnings
+- air_privacy_audit — what is logged locally vs sent to providers
+- air_data_inventory — metric catalog + AQI band thresholds
+- air_current_reading — latest reading (PM2.5, CO2, AQI, temp, humidity)
+- air_aqi_check — fast "is the air OK?" with band + recommendation
+- air_daily_summary — synthesized daily snapshot
+- air_compare_locations — AQI across 2-10 locations
+- air_search_public_sensors — AirGradient public map helper
+
+Optional env vars:
+- WELLNESS_AIR_DEFAULT_PROVIDER — airgradient (default), airthings, purpleair, iqair, awair (v0.2)
+- WELLNESS_AIR_DEFAULT_LOCATION — provider-specific location id; AirGradient public ids work without auth
+- AIRGRADIENT_API_TOKEN — only needed for owned-sensor reads
+- AIRGRADIENT_LOCATION_ID — fallback for default location
+- AIRTHINGS_CLIENT_ID, AIRTHINGS_CLIENT_SECRET — v0.2
+- PURPLEAIR_API_KEY — v0.2
+- IQAIR_API_KEY — v0.2
+- AWAIR_ACCESS_TOKEN — v0.2
+- WELLNESS_AIR_QUIET=1 — suppress the stderr community CTA
+
+Workflow for agents:
+1. Call air_connection_status before any provider-backed tool.
+2. Use air_current_reading or air_aqi_check for spot questions.
+3. Surface AQI band (good/moderate/unhealthy_sensitive/unhealthy/very_unhealthy/hazardous) plus the number.
+4. Pair with WHOOP/Oura/Garmin recovery + nourish meal context for cross-cutting wellness coaching.
+5. AirGradient public sensors require NO auth — pass a locationId from https://www.airgradient.com/map/.
+
+Safety:
+- Public AirGradient locations require no auth; owned sensors use AIRGRADIENT_API_TOKEN.
+- All cached data stays under ~/.wellness-air; no third-party telemetry.
+- Provider tokens are never returned to the agent.
+- AQI band recommendations are heuristic; refer to local public-health agencies for action thresholds.
+- Not affiliated with AirGradient, AirThings, PurpleAir, IQAir, or Awair.
