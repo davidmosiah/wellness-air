@@ -1,5 +1,5 @@
 export const SERVER_NAME = "wellness-air-mcp";
-export const SERVER_VERSION = "0.5.0";
+export const SERVER_VERSION = "0.5.1";
 export const NPM_PACKAGE_NAME = "wellness-air";
 export const PINNED_NPM_PACKAGE = `${NPM_PACKAGE_NAME}@${SERVER_VERSION}`;
 export const USER_AGENT = `${NPM_PACKAGE_NAME}/${SERVER_VERSION} (https://wellness.delx.ai/connectors/air; contact: david@delx.ai)`;
