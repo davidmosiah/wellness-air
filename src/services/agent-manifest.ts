@@ -8,23 +8,26 @@ const SUPPORTED_CLIENTS: AirAgentClient[] = ["claude", "codex", "cursor", "winds
 
 const TOOLS = [
   "air_agent_manifest",
+  "air_aqi_check",
   "air_capabilities",
+  "air_compare_locations",
   "air_connection_status",
-  "air_privacy_audit",
-  "air_data_inventory",
-  "air_quickstart",
-  "air_demo",
   "air_current_reading",
   "air_daily_summary",
-  "air_aqi_check",
-  "air_compare_locations",
-  "air_search_public_sensors",
+  "air_data_inventory",
+  "air_demo",
   "air_list_devices",
+  "air_onboarding",
+  "air_privacy_audit",
+  "air_profile_get",
+  "air_profile_update",
+  "air_quickstart",
+  "air_search_public_sensors",
 ] as const;
 
 const RECOMMENDED_FIRST_CALLS = [
+  "air_profile_get",
   "air_quickstart",
-  "air_connection_status",
   "air_current_reading",
 ];
 

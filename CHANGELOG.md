@@ -6,6 +6,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-11
+
+### Added
+
+- **Shared wellness profile support** — vendored canonical `profile-store` (Delx Wellness `ab83d1a`) at `src/services/profile-store.ts`. Reads/writes `~/.delx-wellness/profile.json` (the same file every Delx Wellness MCP can read).
+- `air_profile_get` MCP tool — returns the user's shared profile, one-line summary, and missing critical fields. Read-only.
+- `air_profile_update` MCP tool — persist a partial patch with `explicit_user_intent: true`. Rejects secret-like fields (oauth/token/secret/password/cookie/refresh/api_key/session).
+- `air_onboarding` MCP tool — returns the 11-question onboarding flow + the current profile + a cross-connector hint that asthma / respiratory sensitivity should tighten AQI thresholds.
+- `wellness-air onboarding [pt-BR|en]` CLI command — emits the flow as JSON on stdout plus a TTY-gated Markdown walkthrough on stderr ("the agent will ask these 11 questions next — non-secret data only, stored at ~/.delx-wellness/profile.json").
+
+### Changed
+
+- Tool count: 13 → 16.
+- `recommended_first_calls` now leads with `air_profile_get` so agents fetch the user's location + sensitivity flags before any reading.
+
 ## [0.4.0] - 2026-05-10
 
 ### Added

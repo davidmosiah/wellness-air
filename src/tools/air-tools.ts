@@ -6,6 +6,15 @@ import { PurpleAirClient } from "../services/purpleair-client.js";
 import { buildAgentManifest } from "../services/agent-manifest.js";
 import { buildCapabilities } from "../services/capabilities.js";
 import { buildPrivacyAudit } from "../services/privacy-audit.js";
+import {
+  buildProfileSummary,
+  getOnboardingFlow,
+  getProfile,
+  getProfilePath,
+  missingCriticalFields,
+  updateProfile,
+  type WellnessProfileDocument,
+} from "../services/profile-store.js";
 import { SUPPORTED_PROVIDERS, type AirProvider } from "../constants.js";
 
 interface ConnectionStatus {
@@ -450,6 +459,91 @@ export function registerAirTools(server: McpServer): void {
         configured: { location: hasLocation, token: hasOwnedToken },
         steps,
         next: steps.find((s) => !s.done) ?? steps[steps.length - 1],
+      });
+    },
+  );
+
+  server.registerTool(
+    "air_profile_get",
+    {
+      title: "Air profile get",
+      description:
+        "Returns the shared Delx Wellness profile (~/.delx-wellness/profile.json). Read-only. Surfaces the user's preferred location, sensitivity flags (asthma, etc.), and units so wellness-air can choose tighter AQI thresholds.",
+      inputSchema: {},
+    },
+    async () => {
+      const profile = await getProfile();
+      return jsonResponse({
+        ok: true,
+        profile,
+        summary: buildProfileSummary(profile),
+        missing_critical: missingCriticalFields(profile),
+        storage_path: getProfilePath(),
+      });
+    },
+  );
+
+  server.registerTool(
+    "air_profile_update",
+    {
+      title: "Air profile update",
+      description:
+        "Persist a partial patch to the shared Delx Wellness profile. Requires explicit_user_intent: true. Rejects any field containing oauth/token/secret/password/cookie/refresh/api_key/session — the profile is for non-secret wellness context only.",
+      inputSchema: {
+        patch: z
+          .record(z.string(), z.unknown())
+          .describe(
+            "Partial WellnessProfileDocument patch. Top-level keys: profile, goals, devices, training, nutrition, preferences, safety, notes.",
+          ),
+        explicit_user_intent: z
+          .boolean()
+          .optional()
+          .describe("Must be true. Pass only after the user explicitly asked to save/update profile data."),
+      },
+    },
+    async ({ patch, explicit_user_intent }) => {
+      if (explicit_user_intent !== true) {
+        return jsonResponse({
+          ok: false,
+          error: "USER_ACTION_REQUIRED",
+          message:
+            "explicit_user_intent must be true to update the shared wellness profile. Confirm with the user, then retry.",
+        });
+      }
+      try {
+        const profile = await updateProfile(patch as Partial<WellnessProfileDocument>);
+        return jsonResponse({
+          ok: true,
+          profile,
+          summary: buildProfileSummary(profile),
+          storage_path: getProfilePath(),
+        });
+      } catch (err) {
+        return jsonResponse({ ok: false, error: "update_failed", message: (err as Error).message });
+      }
+    },
+  );
+
+  server.registerTool(
+    "air_onboarding",
+    {
+      title: "Air onboarding",
+      description:
+        "Returns the 11-question onboarding flow for the shared Delx Wellness profile. Read-only. The agent should ask these questions next so wellness-air (and the rest of the wellness stack) can personalize responses — non-secret data only, stored at ~/.delx-wellness/profile.json.",
+      inputSchema: {
+        locale: z.enum(["en", "pt-BR"]).optional().describe("Onboarding locale. Defaults to en."),
+      },
+    },
+    async ({ locale }) => {
+      const flow = getOnboardingFlow(locale ?? "en");
+      const profile = await getProfile();
+      return jsonResponse({
+        ok: true,
+        ...flow,
+        current_profile: profile,
+        missing_critical: missingCriticalFields(profile),
+        cross_connector_hint:
+          "wellness-air uses profile data to default location + activate tighter AQI thresholds when safety.medical_constraints or safety.conservative_flags includes asthma / respiratory sensitivity.",
       });
     },
   );

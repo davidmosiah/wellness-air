@@ -18,6 +18,9 @@ const EXPECTED_TOOLS = new Set([
   "air_compare_locations",
   "air_search_public_sensors",
   "air_list_devices",
+  "air_profile_get",
+  "air_profile_update",
+  "air_onboarding",
 ]);
 
 const transport = new StdioClientTransport({

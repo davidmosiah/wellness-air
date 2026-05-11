@@ -2,8 +2,14 @@ import { NPM_PACKAGE_NAME, SERVER_VERSION, SUPPORTED_PROVIDERS } from "../consta
 import { AirGradientClient, aqiBand } from "../services/airgradient-client.js";
 import { buildCapabilities } from "../services/capabilities.js";
 import { buildPrivacyAudit } from "../services/privacy-audit.js";
+import {
+  getOnboardingFlow,
+  getProfile,
+  getProfilePath,
+  missingCriticalFields,
+} from "../services/profile-store.js";
 
-const COMMANDS = new Set(["status", "doctor", "setup", "current"]);
+const COMMANDS = new Set(["status", "doctor", "setup", "current", "onboarding"]);
 
 function printCommunityCTA(): void {
   if (process.env.WELLNESS_AIR_QUIET === "1") return;
@@ -34,6 +40,8 @@ export async function runCliCommand(args: string[]): Promise<number> {
         return setup(rest);
       case "current":
         return await current(rest);
+      case "onboarding":
+        return await onboarding(rest);
       default:
         return -1;
     }
@@ -160,6 +168,37 @@ function setup(args: string[]): number {
     ),
   );
   printCommunityCTA();
+  return 0;
+}
+
+async function onboarding(args: string[]): Promise<number> {
+  const locale = args[0] === "pt-BR" ? "pt-BR" : "en";
+  const flow = getOnboardingFlow(locale);
+  const profile = await getProfile();
+  const missing = missingCriticalFields(profile);
+  console.log(
+    JSON.stringify(
+      {
+        ...flow,
+        current_profile: profile,
+        missing_critical: missing,
+      },
+      null,
+      2,
+    ),
+  );
+  if (process.stderr.isTTY && process.env.WELLNESS_AIR_QUIET !== "1") {
+    process.stderr.write(
+      `\n## Delx Wellness shared onboarding (${locale})\n` +
+        `\nThe agent will ask these 11 questions next so wellness-air (and the rest of the\n` +
+        `wellness stack) can personalize responses — non-secret data only, stored at\n` +
+        `${getProfilePath()}.\n\n` +
+        flow.questions
+          .map((q, i) => `${i + 1}. (${q.required ? "required" : "optional"}) ${q.prompt}`)
+          .join("\n") +
+        `\n\nPrivacy: ${flow.privacy_note}\n\n`,
+    );
+  }
   return 0;
 }
 
