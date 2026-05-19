@@ -6,6 +6,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-05-19
+
+### Added
+
+- **`air_health_bands` MCP tool — WHO 2021 / EPA / ASHRAE / UBA health-band classifier.** Takes PM2.5 (µg/m³), PM10 (µg/m³), CO2 (ppm), and tVOC (ppb) readings (any combination) and returns each pollutant's band plus the worst signal across pollutants plus a deduplicated list of recommended actions plus source citations per band. If readings are omitted, the tool falls back to fetching the current reading from the default provider. Bands: PM2.5 (`good <5`, `moderate 5-10`, `sensitive_groups 10-15`, `unhealthy 15-25`, `very_unhealthy 25-50`, `hazardous >50`); PM10 (`good <15`, `moderate 15-30`, `sensitive_groups 30-45`, `unhealthy 45-75`, `very_unhealthy 75-100`, `hazardous >100`); CO2 (`good <800`, `acceptable 800-1000`, `drowsy 1000-1400`, `headache_risk 1400-2000`, `action_needed >2000`); VOC (UBA-1 through UBA-5). Tool count: 16 → 17. Sources: WHO Global Air Quality Guidelines 2021; ASHRAE 62.1-2019 + Persily/Satish/Allen indoor-air cognition literature; Umweltbundesamt 2007 TVOC guide values.
+- New `src/services/health-bands.ts` pure-function module (no IO) with full per-band citations; tested by 4 smoke assertions covering boundary conditions.
+
 ## [0.5.1] - 2026-05-11
 
 ### Fixed

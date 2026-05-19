@@ -5,6 +5,7 @@ import { AirThingsClient } from "../services/airthings-client.js";
 import { PurpleAirClient } from "../services/purpleair-client.js";
 import { buildAgentManifest } from "../services/agent-manifest.js";
 import { buildCapabilities } from "../services/capabilities.js";
+import { classifyHealthBands } from "../services/health-bands.js";
 import { buildPrivacyAudit } from "../services/privacy-audit.js";
 import {
   buildProfileSummary,
@@ -596,6 +597,94 @@ export function registerAirTools(server: McpServer): void {
             notes: ["v0.1 snapshot; rolling daily aggregation lands in v0.2."],
           },
         },
+      });
+    },
+  );
+
+  server.registerTool(
+    "air_health_bands",
+    {
+      title: "Air health bands",
+      description:
+        "Classify PM2.5, PM10, CO2, and VOC readings into WHO 2021 / EPA / ASHRAE / UBA health bands. Pass readings directly, or omit them and the tool will fetch the current reading from the default provider (PM2.5, PM10, CO2, VOC where available). Returns per-pollutant band + the worst signal across pollutants + deduplicated recommended actions + source citations.",
+      inputSchema: {
+        pm25: z.number().min(0).optional().describe("PM2.5 in µg/m³. If omitted, pulled from air_current_reading."),
+        pm10: z.number().min(0).optional().describe("PM10 in µg/m³. If omitted, pulled from air_current_reading."),
+        co2: z.number().min(0).optional().describe("CO2 in ppm. If omitted, pulled from air_current_reading."),
+        voc: z.number().min(0).optional().describe("tVOC in ppb. If omitted, pulled from air_current_reading.tvoc when present."),
+        provider: z.enum(SUPPORTED_PROVIDERS).optional().describe("Provider for fetch fallback. Defaults to airgradient."),
+        locationId: z.string().optional().describe("Provider-specific location id for fetch fallback."),
+      },
+    },
+    async ({ pm25, pm10, co2, voc, provider, locationId }) => {
+      // If any reading is missing, try to fetch the current reading from the default provider.
+      const allProvided = pm25 !== undefined || pm10 !== undefined || co2 !== undefined || voc !== undefined;
+      let pulled: AirReading | undefined;
+      const warnings: string[] = [];
+      if (!allProvided) {
+        const chosen = provider ?? (process.env.WELLNESS_AIR_DEFAULT_PROVIDER as AirProvider) ?? "airgradient";
+        const loc = locationId ?? process.env.WELLNESS_AIR_DEFAULT_LOCATION ?? process.env.AIRGRADIENT_LOCATION_ID;
+        if (!loc) {
+          return jsonResponse({
+            ok: false,
+            error: "missing_input",
+            hint: "Pass pm25/pm10/co2/voc directly, OR set WELLNESS_AIR_DEFAULT_LOCATION (or pass locationId) so the tool can fetch a reading.",
+          });
+        }
+        try {
+          if (chosen === "airthings") {
+            const at = new AirThingsClient();
+            if (!at.hasAuth()) {
+              warnings.push("AirThings token not configured; cannot auto-fetch readings.");
+            } else {
+              pulled = (await at.getLatestSamples(loc)) ?? undefined;
+            }
+          } else if (chosen === "purpleair") {
+            const pa = new PurpleAirClient();
+            if (!pa.hasAuth()) {
+              warnings.push("PurpleAir API key not configured; cannot auto-fetch readings.");
+            } else {
+              pulled = (await pa.getSensor(loc)) ?? undefined;
+            }
+          } else {
+            const ag = new AirGradientClient();
+            pulled = (ag.hasAuth() ? await ag.getOwnedCurrent(loc) : await ag.getPublicCurrent(loc)) ?? undefined;
+          }
+        } catch (err) {
+          warnings.push(`Auto-fetch failed: ${(err as Error).message}`);
+        }
+      }
+
+      const readings = {
+        pm25: pm25 ?? pulled?.pm25,
+        pm10: pm10 ?? pulled?.pm10,
+        co2: co2 ?? pulled?.co2,
+        voc: voc ?? pulled?.tvoc,
+      };
+
+      const populated = Object.values(readings).filter((v) => v !== undefined).length;
+      if (populated === 0) {
+        return jsonResponse({
+          ok: false,
+          error: "no_readings_available",
+          warnings,
+          hint: "No pollutant values supplied and auto-fetch returned nothing classifiable.",
+        });
+      }
+
+      const classification = classifyHealthBands(readings);
+      return jsonResponse({
+        ok: true,
+        readings,
+        worst_signal: classification.worst_signal,
+        pollutants: classification.pollutants,
+        recommended_actions: classification.recommended_actions,
+        sources: classification.sources,
+        warnings,
+        notes: [
+          "Bands sourced from WHO 2021 (PM2.5/PM10), ASHRAE 62.1-2019 / Persily 2015 (CO2), UBA 2007 (VOC).",
+          "Indicative only; for chronic respiratory conditions consult a clinician and your local public-health agency.",
+        ],
       });
     },
   );

@@ -21,6 +21,7 @@ const EXPECTED_TOOLS = new Set([
   "air_profile_get",
   "air_profile_update",
   "air_onboarding",
+  "air_health_bands",
 ]);
 
 const transport = new StdioClientTransport({
@@ -105,6 +106,38 @@ const airthingsRead = JSON.parse(
 assert.equal(airthingsRead.ok, false);
 assert.equal(airthingsRead.error, "missing_credentials");
 console.log(`✓ air_current_reading routes to AirThings client when provider=airthings`);
+
+// air_health_bands: classify provided readings
+const bandsResult = JSON.parse(
+  (
+    await client.callTool({
+      name: "air_health_bands",
+      arguments: { pm25: 18.5, pm10: 38, co2: 1200, voc: 350 },
+    })
+  ).content[0].text,
+);
+assert.equal(bandsResult.ok, true, "air_health_bands should succeed with provided readings");
+assert.equal(bandsResult.pollutants.pm25.label, "unhealthy", `pm25=18.5 should band as 'unhealthy' (WHO 2021); got '${bandsResult.pollutants.pm25.label}'`);
+assert.equal(bandsResult.pollutants.pm10.label, "sensitive_groups", `pm10=38 should band as 'sensitive_groups'; got '${bandsResult.pollutants.pm10.label}'`);
+assert.equal(bandsResult.pollutants.co2.label, "drowsy", `co2=1200 should band as 'drowsy'; got '${bandsResult.pollutants.co2.label}'`);
+assert.equal(bandsResult.pollutants.voc.label, "acceptable", `voc=350 should band as 'acceptable' (UBA-2); got '${bandsResult.pollutants.voc.label}'`);
+assert.equal(bandsResult.worst_signal.pollutant, "pm25", `worst signal should be pm25 (unhealthy); got '${bandsResult.worst_signal?.pollutant}'`);
+assert.ok(Array.isArray(bandsResult.recommended_actions) && bandsResult.recommended_actions.length > 0, "recommended_actions must be non-empty");
+assert.ok(bandsResult.sources.some((s) => /WHO/.test(s)), "sources should cite WHO");
+console.log(`✓ air_health_bands classifies PM2.5/PM10/CO2/VOC; worst=${bandsResult.worst_signal?.pollutant}/${bandsResult.worst_signal?.label}`);
+
+// air_health_bands: 'good' band edges
+const goodBands = JSON.parse(
+  (
+    await client.callTool({
+      name: "air_health_bands",
+      arguments: { pm25: 3, co2: 600 },
+    })
+  ).content[0].text,
+);
+assert.equal(goodBands.pollutants.pm25.label, "good", "pm25=3 should be 'good'");
+assert.equal(goodBands.pollutants.co2.label, "good", "co2=600 should be 'good'");
+console.log(`✓ air_health_bands 'good' edges (PM2.5=3, CO2=600)`);
 
 await client.close();
 console.log("\nall smoke checks passed.");
