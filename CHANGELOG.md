@@ -6,6 +6,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-05-19
+
+### Added
+
+- **`air_health_recommendation` MCP tool — quick PM2.5-centric health recommendation.** Takes PM2.5 (µg/m³, required) plus optional CO2 (ppm) and VOC index, and returns simplified WHO/EPA-aligned bands per pollutant, the overall worst-quality band, and a deduplicated list of plain-language recommendations. Supports `response_format: "json" | "markdown"` so agents can render directly to chat. Complements `air_health_bands` (which is the four-pollutant deep classifier with full source citations) by giving agents a fast "I already have a reading — what should I tell the user?" path. PM2.5 bands: `good <10`, `moderate 10-25`, `unhealthy_sensitive 25-50`, `unhealthy 50-150`, `very_unhealthy >150`. CO2 bands: `fresh <800`, `acceptable 800-1000`, `stale 1000-1500`, `drowsy >1500`. VOC index bands: `low <150`, `moderate 150-300`, `elevated >300`. Tool count: 17 → 18.
+
 ## [0.5.2] - 2026-05-19
 
 ### Added

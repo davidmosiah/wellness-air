@@ -602,6 +602,35 @@ export function registerAirTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "air_health_recommendation",
+    {
+      title: "Air health recommendation",
+      description:
+        "Quick PM2.5-centric health recommendation. Pass current PM2.5 (µg/m³) and optionally CO2 (ppm) and VOC index; returns WHO/EPA-aligned bands per pollutant, the overall worst band, and a deduplicated list of plain-language actions. Use this when you have a reading already and just want a 'what should I do?' answer. For richer four-pollutant classification with full source citations use air_health_bands.",
+      inputSchema: {
+        pm25_ug_m3: z.number().min(0).describe("Required. PM2.5 concentration in micrograms per cubic meter."),
+        co2_ppm: z.number().min(0).optional().describe("Optional. CO2 concentration in parts per million."),
+        voc_index: z.number().min(0).optional().describe("Optional. VOC index (sensor-reported 0-500 style)."),
+        response_format: z.enum(["json", "markdown"]).optional().describe("Output shape. Defaults to json."),
+      },
+    },
+    async ({ pm25_ug_m3, co2_ppm, voc_index, response_format }) => {
+      const classification = classifyRecommendation({
+        pm25_ug_m3,
+        co2_ppm,
+        voc_index,
+      });
+      if (response_format === "markdown") {
+        return {
+          content: [{ type: "text" as const, text: renderRecommendationMarkdown(classification) }],
+          structuredContent: classification as unknown as Record<string, unknown>,
+        };
+      }
+      return jsonResponse(classification);
+    },
+  );
+
+  server.registerTool(
     "air_health_bands",
     {
       title: "Air health bands",
@@ -688,6 +717,189 @@ export function registerAirTools(server: McpServer): void {
       });
     },
   );
+}
+
+export type Pm25Band =
+  | "good"
+  | "moderate"
+  | "unhealthy_sensitive"
+  | "unhealthy"
+  | "very_unhealthy";
+export type Co2Band = "fresh" | "acceptable" | "stale" | "drowsy";
+export type VocBand = "low" | "moderate" | "elevated";
+export type OverallBand = Pm25Band | Co2Band | VocBand;
+
+/** Severity rank shared across pollutant bands so we can pick the worst. */
+const BAND_SEVERITY: Record<OverallBand, number> = {
+  // PM2.5
+  good: 0,
+  moderate: 2,
+  unhealthy_sensitive: 3,
+  unhealthy: 4,
+  very_unhealthy: 5,
+  // CO2
+  fresh: 0,
+  acceptable: 1,
+  stale: 3,
+  drowsy: 4,
+  // VOC
+  low: 0,
+  elevated: 4,
+};
+
+interface RecommendationInput {
+  pm25_ug_m3: number;
+  co2_ppm?: number;
+  voc_index?: number;
+}
+
+export interface AirHealthRecommendation {
+  ok: true;
+  inputs: RecommendationInput;
+  pm25_band: Pm25Band;
+  co2_band?: Co2Band;
+  voc_band?: VocBand;
+  overall_quality: OverallBand;
+  recommendations: string[];
+  who_thresholds_url: string;
+}
+
+/** WHO 2021 24h-aligned simplified PM2.5 bands. */
+export function classifyPm25Band(value: number): Pm25Band {
+  if (value < 10) return "good";
+  if (value < 25) return "moderate";
+  if (value < 50) return "unhealthy_sensitive";
+  if (value <= 150) return "unhealthy";
+  return "very_unhealthy";
+}
+
+/** ASHRAE / indoor-air research aligned CO2 bands. */
+export function classifyCo2Band(value: number): Co2Band {
+  if (value < 800) return "fresh";
+  if (value < 1000) return "acceptable";
+  if (value < 1500) return "stale";
+  return "drowsy";
+}
+
+/** Consumer-sensor VOC index bands (Awair / AirGradient style). */
+export function classifyVocBand(value: number): VocBand {
+  if (value < 150) return "low";
+  if (value < 300) return "moderate";
+  return "elevated";
+}
+
+const PM25_ACTIONS: Record<Pm25Band, string[]> = {
+  good: [],
+  moderate: ["PM2.5 is moderate — sensitive groups can be active outdoors with breaks."],
+  unhealthy_sensitive: [
+    "Reduce indoor combustion sources — PM2.5 unhealthy for sensitive groups.",
+    "If asthmatic or pregnant, limit prolonged outdoor exertion.",
+  ],
+  unhealthy: [
+    "Close windows and run a HEPA filter on high — PM2.5 unhealthy for everyone.",
+    "Wear an N95 outdoors if the source is wildfire smoke or traffic.",
+  ],
+  very_unhealthy: [
+    "Stay indoors with windows sealed and HEPA filtration — PM2.5 very unhealthy.",
+    "Avoid all outdoor exercise; follow local public-health advisories.",
+  ],
+};
+
+const CO2_ACTIONS: Record<Co2Band, string[]> = {
+  fresh: [],
+  acceptable: ["CO2 acceptable — keep an eye on it if occupancy increases."],
+  stale: ["Open a window — CO2 climbing into the stale range (1000+ ppm)."],
+  drowsy: [
+    "Open all windows and increase ventilation now — CO2 above 1500 ppm causes drowsiness and cognitive decline.",
+    "If symptoms appear (headache, fatigue), leave the room.",
+  ],
+};
+
+const VOC_ACTIONS: Record<VocBand, string[]> = {
+  low: [],
+  moderate: ["VOC moderate — consider ventilation if you can smell solvents, candles, or new furniture off-gas."],
+  elevated: [
+    "Ventilate aggressively — VOC index elevated.",
+    "Identify and remove the source (cleaners, paints, fragrance, new furniture).",
+  ],
+};
+
+/** Pick the worst band across the inputs. PM2.5 is always present, others optional. */
+function pickWorstBand(pm25: Pm25Band, co2?: Co2Band, voc?: VocBand): OverallBand {
+  let worst: OverallBand = pm25;
+  let worstRank = BAND_SEVERITY[pm25];
+  if (co2) {
+    const r = BAND_SEVERITY[co2];
+    if (r > worstRank) { worst = co2; worstRank = r; }
+  }
+  if (voc) {
+    const r = BAND_SEVERITY[voc];
+    if (r > worstRank) { worst = voc; worstRank = r; }
+  }
+  return worst;
+}
+
+export function classifyRecommendation(input: RecommendationInput): AirHealthRecommendation {
+  const pm25Band = classifyPm25Band(input.pm25_ug_m3);
+  const co2Band = input.co2_ppm !== undefined ? classifyCo2Band(input.co2_ppm) : undefined;
+  const vocBand = input.voc_index !== undefined ? classifyVocBand(input.voc_index) : undefined;
+  const overall = pickWorstBand(pm25Band, co2Band, vocBand);
+
+  // Build recommendations in priority order: worst-pollutant first, then the others, deduped.
+  const seen = new Set<string>();
+  const recommendations: string[] = [];
+  const push = (items: string[]): void => {
+    for (const item of items) {
+      if (!seen.has(item)) {
+        seen.add(item);
+        recommendations.push(item);
+      }
+    }
+  };
+  // Always include the worst-pollutant actions first.
+  if (overall === pm25Band) push(PM25_ACTIONS[pm25Band]);
+  if (co2Band && overall === co2Band) push(CO2_ACTIONS[co2Band]);
+  if (vocBand && overall === vocBand) push(VOC_ACTIONS[vocBand]);
+  // Then any remaining pollutants.
+  push(PM25_ACTIONS[pm25Band]);
+  if (co2Band) push(CO2_ACTIONS[co2Band]);
+  if (vocBand) push(VOC_ACTIONS[vocBand]);
+  if (recommendations.length === 0) {
+    recommendations.push("Air looks clean across the metrics you provided. No action required.");
+  }
+
+  return {
+    ok: true,
+    inputs: input,
+    pm25_band: pm25Band,
+    co2_band: co2Band,
+    voc_band: vocBand,
+    overall_quality: overall,
+    recommendations,
+    who_thresholds_url:
+      "https://www.who.int/news/item/22-09-2021-new-who-global-air-quality-guidelines",
+  };
+}
+
+function renderRecommendationMarkdown(rec: AirHealthRecommendation): string {
+  const lines: string[] = [];
+  lines.push(`# Air health recommendation`);
+  lines.push("");
+  lines.push(`**Overall:** \`${rec.overall_quality}\``);
+  lines.push("");
+  lines.push(`- PM2.5: ${rec.inputs.pm25_ug_m3} µg/m³ → \`${rec.pm25_band}\``);
+  if (rec.inputs.co2_ppm !== undefined && rec.co2_band) {
+    lines.push(`- CO2: ${rec.inputs.co2_ppm} ppm → \`${rec.co2_band}\``);
+  }
+  if (rec.inputs.voc_index !== undefined && rec.voc_band) {
+    lines.push(`- VOC index: ${rec.inputs.voc_index} → \`${rec.voc_band}\``);
+  }
+  lines.push("");
+  lines.push("## Recommendations");
+  for (const r of rec.recommendations) lines.push(`- ${r}`);
+  lines.push("");
+  lines.push(`_WHO 2021 guidelines: ${rec.who_thresholds_url}_`);
+  return lines.join("\n");
 }
 
 function aqiRecommendation(band: ReturnType<typeof aqiBand>): string {

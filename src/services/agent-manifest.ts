@@ -17,6 +17,7 @@ const TOOLS = [
   "air_data_inventory",
   "air_demo",
   "air_health_bands",
+  "air_health_recommendation",
   "air_list_devices",
   "air_onboarding",
   "air_privacy_audit",

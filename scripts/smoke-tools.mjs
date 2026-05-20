@@ -22,6 +22,7 @@ const EXPECTED_TOOLS = new Set([
   "air_profile_update",
   "air_onboarding",
   "air_health_bands",
+  "air_health_recommendation",
 ]);
 
 const transport = new StdioClientTransport({
@@ -125,6 +126,49 @@ assert.equal(bandsResult.worst_signal.pollutant, "pm25", `worst signal should be
 assert.ok(Array.isArray(bandsResult.recommended_actions) && bandsResult.recommended_actions.length > 0, "recommended_actions must be non-empty");
 assert.ok(bandsResult.sources.some((s) => /WHO/.test(s)), "sources should cite WHO");
 console.log(`✓ air_health_bands classifies PM2.5/PM10/CO2/VOC; worst=${bandsResult.worst_signal?.pollutant}/${bandsResult.worst_signal?.label}`);
+
+// air_health_recommendation: PM2.5 unhealthy + CO2 stale + VOC moderate
+const rec = JSON.parse(
+  (
+    await client.callTool({
+      name: "air_health_recommendation",
+      arguments: { pm25_ug_m3: 60, co2_ppm: 1200, voc_index: 200 },
+    })
+  ).content[0].text,
+);
+assert.equal(rec.ok, true);
+assert.equal(rec.pm25_band, "unhealthy", `pm25=60 should be 'unhealthy'; got '${rec.pm25_band}'`);
+assert.equal(rec.co2_band, "stale", `co2=1200 should be 'stale'; got '${rec.co2_band}'`);
+assert.equal(rec.voc_band, "moderate", `voc=200 should be 'moderate'; got '${rec.voc_band}'`);
+assert.equal(rec.overall_quality, "unhealthy", "worst should be PM2.5 unhealthy");
+assert.ok(Array.isArray(rec.recommendations) && rec.recommendations.length > 0, "recommendations must be non-empty");
+assert.ok(rec.who_thresholds_url.includes("who.int"), "WHO URL should be present");
+console.log(`✓ air_health_recommendation bands PM2.5/CO2/VOC; worst=${rec.overall_quality}`);
+
+// air_health_recommendation: clean air → empty-action fallback message
+const clean = JSON.parse(
+  (
+    await client.callTool({
+      name: "air_health_recommendation",
+      arguments: { pm25_ug_m3: 3, co2_ppm: 500, voc_index: 50 },
+    })
+  ).content[0].text,
+);
+assert.equal(clean.pm25_band, "good");
+assert.equal(clean.co2_band, "fresh");
+assert.equal(clean.voc_band, "low");
+assert.ok(clean.recommendations[0].includes("clean"), "clean-air fallback message should appear");
+console.log(`✓ air_health_recommendation clean-air fallback`);
+
+// air_health_recommendation: markdown response_format
+const md = await client.callTool({
+  name: "air_health_recommendation",
+  arguments: { pm25_ug_m3: 30, co2_ppm: 900, response_format: "markdown" },
+});
+const mdText = md.content[0].text;
+assert.ok(mdText.startsWith("# Air health recommendation"), "markdown should start with heading");
+assert.ok(mdText.includes("`unhealthy_sensitive`"), "markdown should include the pm25 band code");
+console.log(`✓ air_health_recommendation markdown format`);
 
 // air_health_bands: 'good' band edges
 const goodBands = JSON.parse(
