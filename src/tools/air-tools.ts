@@ -6,6 +6,8 @@ import { PurpleAirClient } from "../services/purpleair-client.js";
 import { buildAgentManifest } from "../services/agent-manifest.js";
 import { buildCapabilities } from "../services/capabilities.js";
 import { classifyHealthBands } from "../services/health-bands.js";
+import { buildAirTrend, formatAirTrendMarkdown } from "../services/air-trend.js";
+import { AirTrendInputSchema } from "../schemas/common.js";
 import { buildPrivacyAudit } from "../services/privacy-audit.js";
 import {
   buildProfileSummary,
@@ -715,6 +717,31 @@ export function registerAirTools(server: McpServer): void {
           "Indicative only; for chronic respiratory conditions consult a clinician and your local public-health agency.",
         ],
       });
+    },
+  );
+
+  server.registerTool(
+    "air_trend",
+    {
+      title: "Air trend",
+      description:
+        "Windowed trend analysis for PM2.5 / CO2 / VOC. Pulls past measurements from AirGradient (public or owned) and returns per-pollutant mean / median / min / max / current / rate_of_change_per_hour / peak_at / trough_at / time_above_threshold_minutes plus an optional natural-language observation (only when the data supports one). Pass `pollutant: 'all'` (default) for an array of per-pollutant trends plus `worst_pollutant` per current WHO/ASHRAE bands. Use this for 'is PM2.5 climbing?' / 'was CO2 stable overnight?' / 'when did VOC spike?' kinds of questions.",
+      inputSchema: AirTrendInputSchema,
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true,
+      },
+    },
+    async ({ hours, pollutant, response_format, locationId }) => {
+      const result = await buildAirTrend({ hours, pollutant, locationId });
+      if (!result.ok) return jsonResponse(result);
+      if (response_format === "markdown") {
+        return {
+          content: [{ type: "text" as const, text: formatAirTrendMarkdown(result) }],
+          structuredContent: result as unknown as Record<string, unknown>,
+        };
+      }
+      return jsonResponse(result);
     },
   );
 }

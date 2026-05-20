@@ -23,6 +23,7 @@ const EXPECTED_TOOLS = new Set([
   "air_onboarding",
   "air_health_bands",
   "air_health_recommendation",
+  "air_trend",
 ]);
 
 const transport = new StdioClientTransport({
@@ -169,6 +170,14 @@ const mdText = md.content[0].text;
 assert.ok(mdText.startsWith("# Air health recommendation"), "markdown should start with heading");
 assert.ok(mdText.includes("`unhealthy_sensitive`"), "markdown should include the pm25 band code");
 console.log(`✓ air_health_recommendation markdown format`);
+
+// air_trend: missing_location without env is graceful (no network call)
+const trendNoLoc = JSON.parse(
+  (await client.callTool({ name: "air_trend", arguments: { hours: 6, pollutant: "all" } })).content[0].text,
+);
+assert.equal(trendNoLoc.ok, false);
+assert.equal(trendNoLoc.error, "missing_location");
+console.log(`✓ air_trend reports missing_location when no env/locationId provided`);
 
 // air_health_bands: 'good' band edges
 const goodBands = JSON.parse(

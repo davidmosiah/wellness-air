@@ -25,6 +25,7 @@ const TOOLS = [
   "air_profile_update",
   "air_quickstart",
   "air_search_public_sensors",
+  "air_trend",
 ] as const;
 
 const RECOMMENDED_FIRST_CALLS = [

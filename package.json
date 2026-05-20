@@ -1,6 +1,6 @@
 {
   "name": "wellness-air",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "Local-first air quality MCP for AI agents — AirGradient (open hardware), AirThings, PurpleAir, IQAir AirVisual, Awair. Correlate AQI with sleep, recovery, and wellness.",
   "license": "MIT",
   "type": "module",
@@ -25,7 +25,8 @@
     "dev": "tsx src/index.ts",
     "smoke": "node scripts/smoke-tools.mjs",
     "test:metadata": "node scripts/metadata-check.mjs",
-    "test": "npm run typecheck && npm run build && npm run smoke && npm run test:metadata",
+    "test:air-trend": "node scripts/test-air-trend.mjs",
+    "test": "npm run typecheck && npm run build && npm run smoke && npm run test:metadata && npm run test:air-trend",
     "prepublishOnly": "npm test"
   },
   "engines": {

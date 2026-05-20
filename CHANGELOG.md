@@ -6,6 +6,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-05-20
+
+### Added
+
+- **`air_trend` MCP tool — windowed trend analysis with rate-of-change + conservative natural-language observations.** Pulls past measurements from AirGradient (public or owned sensor) for the configured location across a `hours` window (1-168, default 24) and computes per-pollutant `mean`, `median`, `min`, `max`, `current`, `rate_of_change_per_hour` (Δ mean of last 25% vs first 25% of window, divided by hours), `peak_at` / `trough_at` (ISO timestamps), and `time_above_threshold_minutes` per WHO/ASHRAE thresholds (PM2.5 > 15 µg/m³, CO2 > 1000 ppm, VOC > 250 index). Surfaces a short natural-language `observation` ONLY when the data supports a finding — e.g. "PM2.5 climbed 8 µg/m³ over the last 6 hours — likely combustion source or external smoke event", "CO2 stayed under 800 ppm for the full window — well-ventilated period", "VOC showed a 3-hour spike around 14:30 — check cleaning products / cooking activity". Never invents observations: if no clear pattern, omits the field entirely. Pass `pollutant: 'all'` (default) to get an array of per-pollutant trends plus `worst_pollutant` (the one with the worst current band). Supports `response_format: 'json' | 'markdown'`. Tool annotated `readOnlyHint: true, openWorldHint: true`. Tool count: 18 → 19.
+- New `src/services/air-trend.ts` pure-function module (`analyzeAirTrend` + `buildAirTrend` IO wrapper + `formatAirTrendMarkdown` renderer). Backed by `AirGradientClient.getPublicPast` / `getOwnedPast` calling the AirGradient `/measures/past?from=&to=` endpoint.
+- New `src/schemas/common.ts` for shared zod input shapes (currently exports `AirTrendInputSchema`).
+- Dedicated unit-test runner `scripts/test-air-trend.mjs` (7 cases: increasing PM2.5 trend, flat CO2 ventilated observation, empty input, all-pollutants mode + worst_pollutant, peak_at/trough_at correctness, unremarkable-data no-invented-observation, VOC spike detection). Wired into `npm test`.
+
 ## [0.5.3] - 2026-05-19
 
 ### Added

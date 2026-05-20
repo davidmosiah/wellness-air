@@ -113,6 +113,59 @@ export class AirGradientClient {
     return mapAirGradientResponse(raw);
   }
 
+  /**
+   * Fetch past measurements from a public sensor by location ID. No auth required.
+   * Returns up to `hours` worth of samples; AirGradient typically returns one
+   * sample every few minutes for public sensors.
+   *
+   * Docs: https://api.airgradient.com/public/docs/api/v1/#/locations/get-measures-past
+   * Endpoint shape: GET /public/api/v1/locations/{id}/measures/past?from=ISO&to=ISO
+   */
+  async getPublicPast(locationId: string | number, hours: number): Promise<AirReading[]> {
+    const to = new Date();
+    const from = new Date(to.getTime() - hours * 60 * 60 * 1000);
+    const params = new URLSearchParams({
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
+    const url = `${this.baseUrl}/public/api/v1/locations/${encodeURIComponent(String(locationId))}/measures/past?${params.toString()}`;
+    const res = await this.fetchImpl(url, {
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+    });
+    if (res.status === 404) return [];
+    if (!res.ok) throw new Error(`AirGradient public/past failed: HTTP ${res.status}`);
+    const raw = (await res.json()) as unknown;
+    return mapAirGradientPastResponse(raw);
+  }
+
+  /** Fetch past measurements from an owned location (requires AIRGRADIENT_API_TOKEN). */
+  async getOwnedPast(locationId: string | number, hours: number): Promise<AirReading[]> {
+    if (!this.apiToken) {
+      throw new Error("AIRGRADIENT_API_TOKEN required for owned-sensor reads");
+    }
+    const to = new Date();
+    const from = new Date(to.getTime() - hours * 60 * 60 * 1000);
+    const params = new URLSearchParams({
+      from: from.toISOString(),
+      to: to.toISOString(),
+    });
+    const url = `${this.baseUrl}/api/v1/locations/${encodeURIComponent(String(locationId))}/measures/past?${params.toString()}`;
+    const res = await this.fetchImpl(url, {
+      headers: {
+        "User-Agent": USER_AGENT,
+        Accept: "application/json",
+        Authorization: `Bearer ${this.apiToken}`,
+      },
+    });
+    if (res.status === 404) return [];
+    if (res.status === 401 || res.status === 403) {
+      throw new Error("AirGradient auth failed — check AIRGRADIENT_API_TOKEN");
+    }
+    if (!res.ok) throw new Error(`AirGradient owned/past failed: HTTP ${res.status}`);
+    const raw = (await res.json()) as unknown;
+    return mapAirGradientPastResponse(raw);
+  }
+
   /** List locations the authenticated user owns. */
   async listOwnedLocations(): Promise<Array<{ locationId: string | number; name?: string }>> {
     if (!this.apiToken) {
@@ -153,6 +206,18 @@ function mapAirGradientResponse(raw: Record<string, unknown>): AirReading {
     reading.aqi = pm25ToAqi(pm25);
   }
   return reading;
+}
+
+/**
+ * AirGradient `/measures/past` returns an array of measurement rows. Map each
+ * row through the same shape-mapper so PM2.5/CO2/VOC/temp/humidity all land in
+ * the canonical `AirReading` envelope. AQI is recomputed from PM2.5 per-row.
+ */
+function mapAirGradientPastResponse(raw: unknown): AirReading[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((row): row is Record<string, unknown> => row !== null && typeof row === "object")
+    .map(mapAirGradientResponse);
 }
 
 function pickNumber(obj: Record<string, unknown>, ...keys: string[]): number | undefined {
