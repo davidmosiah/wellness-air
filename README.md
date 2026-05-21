@@ -122,6 +122,14 @@ Run `wellness-air doctor` to inspect the local privacy posture. Highlights:
 - **v0.3** — historical fetch + cross-correlation helper (e.g. `air_correlate_with_sleep`).
 - **v0.4** — webhook trigger for AQI thresholds (agent gets notified when AQI crosses a band).
 
+## 📧 Contact & Support
+
+- 📨 **support@delx.ai** — general questions, integration help, partnerships
+- 🐛 **Bug reports / feature requests** — [GitHub Issues](https://github.com/davidmosiah/wellness-air/issues)
+- 🐦 **Updates** — [@delx369](https://x.com/delx369) on X
+- 🌐 **Site** — [wellness.delx.ai](https://wellness.delx.ai)
+
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

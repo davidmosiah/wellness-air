@@ -1,7 +1,7 @@
 {
   "name": "wellness-air",
   "version": "0.5.4",
-  "description": "Local-first air quality MCP for AI agents — AirGradient (open hardware), AirThings, PurpleAir, IQAir AirVisual, Awair. Correlate AQI with sleep, recovery, and wellness.",
+  "description": "Local-first air quality MCP for AI agents \u2014 AirGradient (open hardware), AirThings, PurpleAir, IQAir AirVisual, Awair. Correlate AQI with sleep, recovery, and wellness.",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -38,7 +38,8 @@
     "url": "git+https://github.com/davidmosiah/wellness-air.git"
   },
   "bugs": {
-    "url": "https://github.com/davidmosiah/wellness-air/issues"
+    "url": "https://github.com/davidmosiah/wellness-air/issues",
+    "email": "support@delx.ai"
   },
   "keywords": [
     "mcp",
