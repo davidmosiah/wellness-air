@@ -37,21 +37,23 @@
 
 ## Overview
 
-Wellness Air is a local MCP server that exposes air-quality readings to any MCP-aware AI agent. v0.1 ships with first-class **AirGradient** support (open hardware + free public API — no auth needed for any of the 12,000+ public sensors worldwide). AirThings, PurpleAir, IQAir AirVisual, and Awair are scaffolded for v0.2.
+Wellness Air is a local MCP server that exposes air-quality readings to any MCP-aware AI agent. It ships with first-class **AirGradient** support (open hardware + free public API — no auth needed for the 2,000+ public sensors in the worldwide feed). **AirThings** and **PurpleAir** are implemented (bring your own free API credentials); **IQAir AirVisual** and **Awair** are on the roadmap.
 
 > If wellness-air helps your agent, please star the repo. Stars make the project easier for other AI builders to discover and help Delx keep shipping local-first wellness infrastructure.
 
 ## Try It In 60 Seconds
 
 ```bash
-# Pick a public sensor near you at https://www.airgradient.com/map/
-# Copy the locationId from the URL (e.g. 654321)
+# 89 is a real, public AirGradient sensor (Prem Tinsulanonda School, Thailand).
+# Swap in one near you from https://www.airgradient.com/map/ — copy the numeric
+# locationId from the URL.
 
-WELLNESS_AIR_DEFAULT_LOCATION=654321 npx -y wellness-air doctor
-WELLNESS_AIR_DEFAULT_LOCATION=654321 npx -y wellness-air current
+WELLNESS_AIR_DEFAULT_LOCATION=89 npx -y wellness-air doctor
+WELLNESS_AIR_DEFAULT_LOCATION=89 npx -y wellness-air current
 ```
 
-That's it — no token, no signup, no telemetry.
+That's it — no token, no signup, no telemetry. Public reads use AirGradient's
+token-free worldwide feed, so any locationId in that feed works out of the box.
 
 ## Install in Claude Desktop / Cursor / ChatGPT Desktop / Codex
 
@@ -63,16 +65,16 @@ That's it — no token, no signup, no telemetry.
       "args": ["-y", "wellness-air"],
       "env": {
         "WELLNESS_AIR_DEFAULT_PROVIDER": "airgradient",
-        "WELLNESS_AIR_DEFAULT_LOCATION": "654321"
+        "WELLNESS_AIR_DEFAULT_LOCATION": "89"
       }
     }
   }
 }
 ```
 
-Reload your client. The agent now has 10 air-quality tools.
+Reload your client. The agent now has 19 air-quality tools.
 
-## Tools (10 total)
+## Tools (19 total)
 
 | Tool | Purpose |
 |---|---|
@@ -82,17 +84,26 @@ Reload your client. The agent now has 10 air-quality tools.
 | `air_privacy_audit` | What is logged locally vs sent to providers |
 | `air_data_inventory` | Metric catalog + AQI band thresholds |
 | **`air_current_reading`** | **Latest sensor reading (PM2.5, CO₂, AQI, temp, humidity)** |
+| `air_list_devices` | List devices on an authenticated provider account (AirThings) |
 | **`air_aqi_check`** | **Fast 'is the air OK?' answer with band + recommendation** |
 | `air_daily_summary` | Synthesized daily snapshot |
 | `air_compare_locations` | Compare AQI across 2-10 locations |
 | `air_search_public_sensors` | Discovery helper for AirGradient public map |
+| `air_quickstart` | Personalized 3-step setup walkthrough based on current env state |
+| `air_profile_get` | Read the shared Delx Wellness profile (location, sensitivities, units) |
+| `air_profile_update` | Persist a non-secret patch to the shared wellness profile (explicit intent required) |
+| `air_onboarding` | 11-question onboarding flow for the shared wellness profile |
+| `air_demo` | Realistic example payloads — preview output before configuring anything |
+| `air_health_recommendation` | PM2.5/CO₂/VOC → WHO/EPA bands + plain-language actions |
+| `air_health_bands` | Classify PM2.5/PM10/CO₂/VOC into WHO 2021 / EPA / ASHRAE / UBA bands + citations |
+| `air_trend` | Windowed trend analysis (mean/median/rate-of-change/peaks) for PM2.5/CO₂/VOC |
 
 ## Why local-first?
 
 - **Public sensors require zero auth.** AirGradient runs an open public API; just pass a `locationId`.
 - **Owned-sensor tokens stay on your machine.** Set `AIRGRADIENT_API_TOKEN` only if you own a sensor.
 - **No telemetry.** wellness-air never phones home. The only outbound calls go to the providers you configure.
-- **Read-only.** No tool in v0.1 mutates anything upstream.
+- **Read-only.** No tool mutates anything upstream. (`air_profile_update` writes only to your local shared wellness profile, never to a provider, and requires explicit user intent.)
 
 ## Cross-connector wedge
 
@@ -118,9 +129,12 @@ Run `wellness-air doctor` to inspect the local privacy posture. Highlights:
 
 ## Roadmap
 
-- **v0.2** — full AirThings + PurpleAir + IQAir + Awair adapters; rolling daily/weekly aggregations.
-- **v0.3** — historical fetch + cross-correlation helper (e.g. `air_correlate_with_sleep`).
-- **v0.4** — webhook trigger for AQI thresholds (agent gets notified when AQI crosses a band).
+**Shipped:** AirGradient (public + owned) · AirThings · PurpleAir adapters · WHO/EPA/ASHRAE/UBA health bands · windowed trend analysis (`air_trend`) · shared Delx Wellness profile + onboarding.
+
+**Next:**
+- IQAir AirVisual + Awair adapters.
+- Cross-correlation helper (e.g. `air_correlate_with_sleep`) against the rest of the Delx Wellness stack.
+- Webhook trigger for AQI thresholds (agent gets notified when AQI crosses a band).
 
 ## 📧 Contact & Support
 

@@ -3,7 +3,11 @@
  * Docs: https://api.airgradient.com/public/docs/api/v1/
  *
  * Two read modes:
- *  1. Public sensor by location (no auth) — `https://api.airgradient.com/public/api/v1/locations/{locationId}/measures/current`
+ *  1. Public sensors (no auth) — `https://api.airgradient.com/public/api/v1/world/locations/measures/current`
+ *     returns the current reading for every public location worldwide; we filter
+ *     to the requested locationId. (The per-location `/locations/{id}/measures/current`
+ *     endpoint requires a `?token=` query param and returns HTTP 422 without it, so it
+ *     is NOT usable for the token-free public path.)
  *  2. Owned sensor with token — `Authorization: Bearer <token>` against /api/v1/...
  */
 import { AIRGRADIENT_API_BASE, USER_AGENT } from "../constants.js";
@@ -79,16 +83,30 @@ export class AirGradientClient {
     return Boolean(this.apiToken);
   }
 
-  /** Fetch current measurement from a public sensor by location ID. No auth required. */
+  /**
+   * Fetch current measurement from a public sensor by location ID. No auth required.
+   *
+   * Uses the bulk world endpoint (`/public/api/v1/world/locations/measures/current`)
+   * and filters to the requested locationId. The per-location endpoint requires a
+   * `?token=` query param and returns HTTP 422 for token-free callers, so it cannot
+   * back the public path. Returns `null` if the location is not in the public feed.
+   */
   async getPublicCurrent(locationId: string | number): Promise<AirReading | null> {
-    const url = `${this.baseUrl}/public/api/v1/locations/${encodeURIComponent(String(locationId))}/measures/current`;
+    const target = String(locationId);
+    const url = `${this.baseUrl}/public/api/v1/world/locations/measures/current`;
     const res = await this.fetchImpl(url, {
       headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
     });
     if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`AirGradient public/current failed: HTTP ${res.status}`);
-    const raw = (await res.json()) as Record<string, unknown>;
-    return mapAirGradientResponse(raw);
+    if (!res.ok) throw new Error(`AirGradient public/world failed: HTTP ${res.status}`);
+    const raw = (await res.json()) as unknown;
+    if (!Array.isArray(raw)) return null;
+    const match = raw.find(
+      (row): row is Record<string, unknown> =>
+        row !== null && typeof row === "object" && String((row as Record<string, unknown>).locationId) === target,
+    );
+    if (!match) return null;
+    return mapAirGradientResponse(match);
   }
 
   /** Fetch current measurement from an owned location (requires AIRGRADIENT_API_TOKEN). */
@@ -197,8 +215,8 @@ function mapAirGradientResponse(raw: Record<string, unknown>): AirReading {
     pm25,
     pm10: pickNumber(raw, "pm01", "pm10"),
     co2: pickNumber(raw, "rco2", "co2"),
-    tvoc: pickNumber(raw, "tvoc_index", "tvoc"),
-    nox: pickNumber(raw, "nox_index", "nox"),
+    tvoc: pickNumber(raw, "tvocIndex", "tvoc_index", "tvoc"),
+    nox: pickNumber(raw, "noxIndex", "nox_index", "nox"),
     temperature_c: pickNumber(raw, "atmp", "temperature_c", "temperature"),
     humidity: pickNumber(raw, "rhum", "humidity"),
   };
