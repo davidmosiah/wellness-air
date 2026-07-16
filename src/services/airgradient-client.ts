@@ -140,6 +140,7 @@ export class AirGradientClient {
    * Endpoint shape: GET /public/api/v1/locations/{id}/measures/past?from=ISO&to=ISO
    */
   async getPublicPast(locationId: string | number, hours: number): Promise<AirReading[]> {
+    validateHours(hours);
     const to = new Date();
     const from = new Date(to.getTime() - hours * 60 * 60 * 1000);
     const params = new URLSearchParams({
@@ -161,6 +162,7 @@ export class AirGradientClient {
     if (!this.apiToken) {
       throw new Error("AIRGRADIENT_API_TOKEN required for owned-sensor reads");
     }
+    validateHours(hours);
     const to = new Date();
     const from = new Date(to.getTime() - hours * 60 * 60 * 1000);
     const params = new URLSearchParams({
@@ -204,6 +206,12 @@ export class AirGradientClient {
       locationId: (row.locationId ?? row.id) as string | number,
       name: typeof row.name === "string" ? row.name : undefined,
     }));
+  }
+}
+
+function validateHours(hours: number): void {
+  if (!Number.isInteger(hours) || hours < 1 || hours > 168) {
+    throw new Error("hours must be an integer from 1 to 168");
   }
 }
 
