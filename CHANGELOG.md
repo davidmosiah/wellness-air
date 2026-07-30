@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.8 — 2026-07-30
+
+### Added
+
+- **Agent-readiness (mcp-scorecard):** real `privacy_mode` input on all read tools (`summary|structured|raw`), full MCP resource set (`wellness-air://agent-manifest|capabilities|connection-status|inventory|privacy-audit`), `readOnlyHint` annotations on read tools, and `standard_tools` on `air_agent_manifest`.
+
 ## 0.5.7 — 2026-07-16
 
 ### Fixed

@@ -6,11 +6,13 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { DEFAULT_HOST, DEFAULT_PORT, SERVER_NAME, SERVER_VERSION } from "./constants.js";
 import { isCliCommand, runCliCommand } from "./cli/commands.js";
+import { registerAirResources } from "./resources/air-resources.js";
 import { registerAirTools } from "./tools/air-tools.js";
 
 function createServer(): McpServer {
   const server = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION });
   registerAirTools(server);
+  registerAirResources(server);
   return server;
 }
 

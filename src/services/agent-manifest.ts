@@ -41,6 +41,7 @@ export interface AirAgentManifest {
   supported_clients: AirAgentClient[];
   install: { command: string; args: string[]; optional_env: string[] };
   recommended_first_calls: string[];
+  standard_tools: ReadonlyArray<string>;
   tools: ReadonlyArray<string>;
   resources: string[];
   agent_rules: string[];
@@ -77,10 +78,13 @@ export function buildAgentManifest(client: AirAgentClient = "generic"): AirAgent
       ],
     },
     recommended_first_calls: RECOMMENDED_FIRST_CALLS,
+    standard_tools: TOOLS,
     tools: TOOLS,
     resources: [
       "wellness-air://agent-manifest",
       "wellness-air://capabilities",
+      "wellness-air://connection-status",
+      "wellness-air://inventory",
       "wellness-air://privacy-audit",
     ],
     agent_rules: [
@@ -90,6 +94,7 @@ export function buildAgentManifest(client: AirAgentClient = "generic"): AirAgent
       "Public AirGradient sensors do NOT require a token — pass a locationId from the global map.",
       "Owned sensors require provider-specific tokens via env vars; never request them in chat.",
       "Treat all readings as advisory, not medical. Refer to local public-health agencies for action thresholds.",
+      "privacy_mode=summary on read tools omits location identifiers and device serials; structured/raw return full payloads.",
     ],
     community: {
       repo: "https://github.com/davidmosiah/wellness-air",

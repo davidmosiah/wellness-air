@@ -7,7 +7,7 @@ import { buildAgentManifest } from "../services/agent-manifest.js";
 import { buildCapabilities } from "../services/capabilities.js";
 import { classifyHealthBands } from "../services/health-bands.js";
 import { buildAirTrend, formatAirTrendMarkdown } from "../services/air-trend.js";
-import { AirTrendInputSchema } from "../schemas/common.js";
+import { AirTrendInputSchema, PrivacyModeSchema } from "../schemas/common.js";
 import { buildPrivacyAudit } from "../services/privacy-audit.js";
 import {
   buildProfileSummary,
@@ -19,6 +19,42 @@ import {
   type WellnessProfileDocument,
 } from "../services/profile-store.js";
 import { SUPPORTED_PROVIDERS, type AirProvider } from "../constants.js";
+
+/** Mutation-name patterns (aligned with mcp-scorecard MUTATION_PATTERNS). */
+const MUTATION_NAME_RE =
+  /(^|_)(set|update|delete|create|pause|resume|enable|disable|cancel|publish|send|remove|add|insert|patch|put|post|exchange|revoke|grant|authorize|reset|clear|forget|destroy|wipe|logout|signout|sign_out|log_intake|log_water|bulk_log|remember|undo|snooze|dismiss)(_|$)/i;
+
+const OPEN_WORLD_READ_RE =
+  /(current_reading|aqi_check|daily_summary|compare_locations|list_devices|health_bands|trend|search_public)/i;
+
+function decorateReadToolConfig(
+  name: string,
+  config: {
+    title?: string;
+    description?: string;
+    inputSchema?: Record<string, unknown>;
+    annotations?: Record<string, unknown>;
+    [key: string]: unknown;
+  },
+) {
+  if (MUTATION_NAME_RE.test(name)) return config;
+  const existingSchema = (config.inputSchema ?? {}) as Record<string, unknown>;
+  const existingAnn = (config.annotations ?? {}) as Record<string, unknown>;
+  return {
+    ...config,
+    inputSchema: {
+      ...existingSchema,
+      privacy_mode: existingSchema.privacy_mode ?? PrivacyModeSchema,
+    },
+    annotations: {
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: existingAnn.openWorldHint ?? OPEN_WORLD_READ_RE.test(name),
+      ...existingAnn,
+      readOnlyHint: true,
+    },
+  };
+}
 
 interface ConnectionStatus {
   ok: boolean;
@@ -58,15 +94,51 @@ function summarizeReading(reading: AirReading): string {
   return parts.join(" · ");
 }
 
-function jsonResponse(payload: unknown) {
-  const text = JSON.stringify(payload, null, 2);
+/** Light redaction for privacy_mode=summary (omit location/device identifiers). */
+function applyPrivacyMode(payload: Record<string, unknown>, privacy_mode?: string): Record<string, unknown> {
+  const mode = privacy_mode ?? "structured";
+  if (mode !== "summary") return { ...payload, privacy_mode: mode };
+  const out: Record<string, unknown> = { ...payload, privacy_mode: mode };
+  delete out.locationId;
+  if (out.reading && typeof out.reading === "object" && out.reading !== null) {
+    const reading = { ...(out.reading as Record<string, unknown>) };
+    delete reading.serialNumber;
+    delete reading.deviceId;
+    delete reading.device_id;
+    out.reading = reading;
+  }
+  if (Array.isArray(out.devices)) {
+    out.devices = (out.devices as Record<string, unknown>[]).map((d) => {
+      const copy = { ...d };
+      delete copy.serialNumber;
+      delete copy.deviceId;
+      return copy;
+    });
+  }
+  return out;
+}
+
+function jsonResponse(payload: unknown, privacy_mode?: string) {
+  const shaped =
+    privacy_mode !== undefined && payload && typeof payload === "object"
+      ? applyPrivacyMode(payload as Record<string, unknown>, privacy_mode)
+      : payload;
+  const text = JSON.stringify(shaped, null, 2);
   return {
     content: [{ type: "text" as const, text }],
-    structuredContent: payload as Record<string, unknown>,
+    structuredContent: shaped as Record<string, unknown>,
   };
 }
 
 export function registerAirTools(server: McpServer): void {
+  const registerTool = server.registerTool.bind(server) as (
+    name: string,
+    config: Record<string, unknown>,
+    handler: unknown,
+  ) => unknown;
+  (server as unknown as { registerTool: typeof registerTool }).registerTool = (name, config, handler) =>
+    registerTool(name, decorateReadToolConfig(name, config), handler);
+
   server.registerTool(
     "air_agent_manifest",
     {
@@ -158,7 +230,9 @@ export function registerAirTools(server: McpServer): void {
         locationId: z.string().optional().describe("Provider-specific location identifier."),
       },
     },
-    async ({ provider, locationId }) => {
+    async (params) => {
+      const { provider, locationId } = params;
+      const privacy_mode = (params as { privacy_mode?: string }).privacy_mode;
       const chosen = provider ?? (process.env.WELLNESS_AIR_DEFAULT_PROVIDER as AirProvider) ?? "airgradient";
       const loc = locationId ?? process.env.WELLNESS_AIR_DEFAULT_LOCATION ?? process.env.AIRGRADIENT_LOCATION_ID;
       if (!loc) {
@@ -166,7 +240,7 @@ export function registerAirTools(server: McpServer): void {
           ok: false,
           error: "missing_location",
           hint: "Pass locationId or set WELLNESS_AIR_DEFAULT_LOCATION (AirGradient public location id).",
-        });
+        }, privacy_mode);
       }
       if (chosen === "airthings") {
         const at = new AirThingsClient();
@@ -190,9 +264,9 @@ export function registerAirTools(server: McpServer): void {
             reading,
             summary: summarizeReading(reading),
             band: reading.aqi !== undefined ? aqiBand(reading.aqi) : undefined,
-          });
+          }, privacy_mode);
         } catch (err) {
-          return jsonResponse({ ok: false, error: "airthings_error", provider: "airthings", message: (err as Error).message });
+          return jsonResponse({ ok: false, error: "airthings_error", provider: "airthings", message: (err as Error).message }, privacy_mode);
         }
       }
       if (chosen === "purpleair") {
@@ -217,9 +291,9 @@ export function registerAirTools(server: McpServer): void {
             reading,
             summary: summarizeReading(reading),
             band: reading.aqi !== undefined ? aqiBand(reading.aqi) : undefined,
-          });
+          }, privacy_mode);
         } catch (err) {
-          return jsonResponse({ ok: false, error: "purpleair_error", provider: "purpleair", message: (err as Error).message });
+          return jsonResponse({ ok: false, error: "purpleair_error", provider: "purpleair", message: (err as Error).message }, privacy_mode);
         }
       }
       if (chosen !== "airgradient") {
@@ -228,12 +302,12 @@ export function registerAirTools(server: McpServer): void {
           error: "provider_not_implemented",
           provider: chosen,
           hint: `v0.4 ships airgradient + airthings + purpleair. Remaining roadmap: ${SUPPORTED_PROVIDERS.filter((p) => p !== "airgradient" && p !== "airthings" && p !== "purpleair").join(", ")}.`,
-        });
+        }, privacy_mode);
       }
       const client = new AirGradientClient();
       const reading = client.hasAuth() ? await client.getOwnedCurrent(loc) : await client.getPublicCurrent(loc);
       if (!reading) {
-        return jsonResponse({ ok: false, error: "not_found", provider: chosen, locationId: loc });
+        return jsonResponse({ ok: false, error: "not_found", provider: chosen, locationId: loc }, privacy_mode);
       }
       return jsonResponse({
         ok: true,
@@ -242,7 +316,7 @@ export function registerAirTools(server: McpServer): void {
         reading,
         summary: summarizeReading(reading),
         band: reading.aqi !== undefined ? aqiBand(reading.aqi) : undefined,
-      });
+      }, privacy_mode);
     },
   );
 

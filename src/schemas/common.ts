@@ -6,6 +6,14 @@
  */
 import { z } from "zod";
 
+/** Per-call privacy override accepted on read tools (scorecard + agent surface). */
+export const PrivacyModeSchema = z
+  .enum(["summary", "structured", "raw"])
+  .optional()
+  .describe(
+    "Optional privacy mode: summary | structured | raw. summary omits location identifiers and device serials when present; structured/raw return full payload.",
+  );
+
 /** Input schema for `air_trend` — windowed trend analysis. */
 export const AirTrendInputSchema = {
   hours: z
@@ -26,6 +34,7 @@ export const AirTrendInputSchema = {
     .string()
     .optional()
     .describe("AirGradient locationId. Falls back to WELLNESS_AIR_DEFAULT_LOCATION."),
+  privacy_mode: PrivacyModeSchema,
 } as const;
 
 export type AirTrendPollutant = "pm25" | "co2" | "voc" | "all";

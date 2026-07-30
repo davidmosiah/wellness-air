@@ -46,8 +46,22 @@ const manifest = await client.callTool({ name: "air_agent_manifest", arguments: 
 const manifestPayload = JSON.parse(manifest.content[0].text);
 assert.equal(manifestPayload.name, "wellness-air-mcp");
 assert.ok(Array.isArray(manifestPayload.tools));
+assert.ok(Array.isArray(manifestPayload.standard_tools) && manifestPayload.standard_tools.length > 0);
 assert.ok(manifestPayload.community.repo.includes("wellness-air"));
-console.log("✓ air_agent_manifest returns expected shape");
+console.log("✓ air_agent_manifest returns expected shape (incl. standard_tools)");
+
+const privacyModeTool = tools.find((t) => t.name === "air_current_reading");
+assert.ok(privacyModeTool, "air_current_reading must exist");
+assert.ok(
+  privacyModeTool.inputSchema?.properties?.privacy_mode || privacyModeTool.inputSchema?.properties?.privacyMode,
+  "air_current_reading must expose privacy_mode in inputSchema",
+);
+assert.equal(privacyModeTool.annotations?.readOnlyHint, true, "air_current_reading must be annotated readOnlyHint");
+console.log("✓ privacy_mode + readOnlyHint present on air_current_reading");
+
+const { resources } = await client.listResources();
+assert.ok(resources.length >= 3, `expected ≥3 MCP resources, got ${resources.length}`);
+console.log(`✓ listResources returns ${resources.length} resources`);
 
 const status = await client.callTool({ name: "air_connection_status", arguments: {} });
 const statusPayload = JSON.parse(status.content[0].text);
