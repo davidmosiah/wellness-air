@@ -806,6 +806,22 @@ export function registerAirTools(server: McpServer): void {
         openWorldHint: true,
       },
     },
+    // KNOWN LIMITATION (pre-dates 0.6.x, deliberately not fixed here — out of
+    // scope of the time-integration work, and changing it changes the output
+    // contract of every air_trend response):
+    //   `privacy_mode` is declared by AirTrendInputSchema and injected by
+    //   decorateReadToolConfig, but this handler never destructures it. None of
+    //   the three modes is applied, and unlike the other read tools the value is
+    //   not even echoed back — so a caller passing privacy_mode: "summary" gets
+    //   a response indistinguishable from "structured", with no signal that the
+    //   request was ignored.
+    //   Low blast radius today: air_trend's payload carries no location
+    //   identifier or device serial, which is all applyPrivacyMode() redacts —
+    //   so "summary" would be a no-op on the body regardless. The defect is the
+    //   silent no-op, not leaked data.
+    //   Fix = accept privacy_mode and route both returns through
+    //   jsonResponse(result, privacy_mode) so at minimum the mode is echoed.
+    //   Needs its own version bump (adds a field to every response).
     async ({ hours, pollutant, response_format, locationId }) => {
       const result = await buildAirTrend({ hours, pollutant, locationId });
       if (!result.ok) return jsonResponse(result);

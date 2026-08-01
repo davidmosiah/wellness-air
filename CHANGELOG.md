@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6.1 — 2026-08-01
+
+### Fixed
+
+- **`air_trend` read array position as position in time, so a provider returning newest-first would have made `current` the OLDEST reading — and 0.6.0 started saying so out loud.** The series was never sorted. `current` was the last element of the array, `last_sample_at` the last timestamp, and `rate_of_change_per_hour` compared the first quarter of the *array* to the last quarter. Measured on the 0.6.0 build, feeding the same 24-sample falling series newest-first: `time_above_threshold_minutes` 120 (correct — the integrator sorts internally, so minutes and `coverage_ratio` were always robust), but `current` 40 instead of 17, `rate_of_change_per_hour` +0.75 instead of −0.75 (a falling series reported as rising), and `last_sample_at` `00:00` instead of `01:55`.
+  - **Why this mattered more after 0.6.0 than before:** `current` had carried this assumption all along, silently. 0.6.0 built `last_sample_at` and the low-coverage note on top of it and made an explicit temporal claim — *"Last sample: X"*, *"current may be stale"* — from an ordering the module had never verified. A caller can discount a bare number; a timestamped caveat that names the wrong sample is trusted. AirGradient returns ascending today, but that was never part of any provider contract, and a merged or paged response does not have to.
+  - **Fix:** the series is sorted chronologically once, at the entry point (`analyzeAirTrend`), and every temporal field is derived from the sorted series. Samples whose timestamp cannot be parsed still count towards `mean`/`median`/`min`/`max`/`samples_analyzed` but sort to the front, so an unplaceable sample can never be reported as the most recent one. The input array is not mutated.
+- **The VOC spike observation padded the run with the window's GLOBAL median cadence instead of the run's own, so one physical event reported different durations depending on how the sensor sampled *elsewhere*.** A spike genuinely spanning 14:30 → 15:30 at a 30-minute cadence was announced as a *"2-hour spike"* inside an hourly window and a *"1.2-hour spike"* inside a 10-minute-cadence window. 0.6.0's claim that the observation "spans the run's real elapsed time" was only half true: the elapsed time was there, plus a padding term taken from the wrong series. The span is now computed with the midpoint rule over the run's own sample spacing (`perPointSpansMs`, the same primitive that produces `time_above_threshold_minutes`, so the two can no longer disagree) — that run reports 1.5 hours from either baseline.
+- **Spikes shorter than an hour were floored to `"1-hour"`** by a `Math.max(1, …)` on the rounded hour count: three samples 5 minutes apart span 15 minutes and were announced as an hour long. Spans under an hour are now reported in minutes (`"VOC showed a 15-minute spike around …"`).
+
+### Added
+
+- `scripts/test-air-trend.mjs` tests 9 and 10, both verified to fail against the 0.6.0 build and pass against this one. Test 9 feeds the same series newest-first and deterministically shuffled and asserts the *whole* per-pollutant result is identical to the ascending analysis — not just the fields enumerated today, which is what stops the next temporal field from inheriting the assumption — plus that the low-coverage note quotes the newest timestamp and never the oldest, and that an undated sample is counted but never becomes `last_sample_at`. Test 10 asserts the VOC span numerically (90 min), asserts it is identical across a sparse and a dense baseline carrying the identical run, covers the sub-hour case (15 min), and checks the observation survives a newest-first series. All 8 pre-existing tests still pass unchanged.
+- Rationale comments on `MAX_SAMPLE_SPAN_MINUTES` (60) and `LOW_COVERAGE_RATIO` (0.75) explaining what each number trades off in each direction, so a later reader does not treat them as arbitrary — or as derived.
+
+### Known limitations
+
+- **`air_trend` accepts `privacy_mode` and ignores it.** `AirTrendInputSchema` declares the field and `decorateReadToolConfig` injects it, but the `air_trend` handler destructures only `{ hours, pollutant, response_format, locationId }`. None of the three modes is applied, and unlike the other read tools the value is not even echoed back — a caller passing `privacy_mode: "summary"` gets a response indistinguishable from `"structured"`, with no signal the request was dropped. This pre-dates 0.6.x and is byte-identical before and after the 0.6.0/0.6.1 work; it is recorded rather than fixed because the fix adds a field to every `air_trend` response and belongs with its own version bump. Blast radius is low today: `air_trend`'s payload carries no location identifier or device serial, which is all `applyPrivacyMode()` redacts, so `"summary"` would be a no-op on the body regardless. The defect is the silent no-op, not leaked data. Documented at the handler in `src/tools/air-tools.ts`.
+
+### Changed
+
+- Patch bump: no field is added, removed or renamed. `current`, `last_sample_at`, `peak_at`, `trough_at` and `rate_of_change_per_hour` become correct for non-ascending input (they were already correct for the ascending input AirGradient sends), and the VOC observation string gains a `N-minute` form alongside `N-hour`.
+
 ## 0.6.0 — 2026-08-01
 
 ### Fixed

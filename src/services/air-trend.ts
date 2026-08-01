@@ -21,6 +21,10 @@
  * downtime therefore shrinks the number instead of inflating it, and
  * `coverage_ratio` / `last_sample_at` tell the caller how much of the window
  * the sensor actually observed.
+ *
+ * The series is sorted chronologically ONCE, at the entry point
+ * (`analyzeAirTrend`), and every temporal field is derived from that sorted
+ * series — see `sortSamplesChronologically`.
  */
 
 import type { AirReading } from "./airgradient-client.js";
@@ -46,12 +50,40 @@ const UNIT: Record<TrendPollutant, string> = {
  * A reading is an instantaneous measurement; without a neighbouring sample to
  * bound it, one hour is the most it can honestly speak for. This is what stops
  * a lone reading either side of a sensor outage from claiming the whole gap.
+ *
+ * WHY 60 — a chosen bound, not a derived one. Three constraints meet here:
+ *  1. Consumer indoor sensors report on the order of 1–10 min (AirGradient
+ *     ~5 min, AirThings ~5 min, PurpleAir ~2 min, Awair ~1 min). 60 min is
+ *     ~6–60x the widest of those cadences, so it never clips a HEALTHY series —
+ *     the cap only ever engages on a real outage.
+ *  2. It is the coarsest granularity the tool reports on (`hours`, and the
+ *     observation strings), so an error of at most one cap is at most one unit
+ *     of the answer.
+ *  3. Indoor air events (cooking, cleaning, a closed room filling with CO2)
+ *     evolve on a scale of tens of minutes; assuming a reading still holds an
+ *     hour later is already generous, and two hours would not be defensible.
+ * Raising it makes outage-adjacent readings claim more time (the 0.5.8 defect,
+ * in miniature); lowering it starts under-counting sparse-but-honest sensors.
+ * Change it only with a fixture that shows which of the two you are trading.
  */
 const MAX_SAMPLE_SPAN_MINUTES = 60;
 
 /**
  * Below this fraction of window coverage, `time_above_threshold_minutes` is a
  * floor rather than a measurement and `current` may be stale — say so in notes.
+ *
+ * WHY 0.75 — a chosen threshold, not a derived one. It is the point at which a
+ * caller's default reading of the output ("this describes the window I asked
+ * for") stops being safe. At 0.75 the sensor missed a quarter of the window: on
+ * the default 24h call that is 6 hours unobserved, enough to hide a whole
+ * cooking or cleaning event, so the caveat is warranted. Above it, the gaps are
+ * short enough that the midpoint rule interpolates them within the per-sample
+ * cap and the number reads as a measurement.
+ * It is deliberately loose: a sensor dropping the odd sample (0.95+) should not
+ * emit a caveat on every call — a note that always fires is a note nobody
+ * reads. Tightening it towards 0.95 trades false calm for note fatigue.
+ * This gates only the NOTE. The numbers themselves are always honest about
+ * coverage: `coverage_ratio` is reported unconditionally, at every level.
  */
 const LOW_COVERAGE_RATIO = 0.75;
 
@@ -107,7 +139,11 @@ export interface PerPollutantTrend {
    * `time_above_threshold_minutes` is a floor and `current` may be stale.
    */
   coverage_ratio: number;
-  /** ISO timestamp of the most recent sample backing `current`. */
+  /**
+   * ISO timestamp of the most recent sample backing `current`. Derived from the
+   * chronologically sorted series, so it is the newest reading regardless of
+   * the order the provider returned rows in.
+   */
   last_sample_at?: string;
   observation?: string;
 }
@@ -154,11 +190,51 @@ interface TimeIntegration {
   minutesAbove: number;
   /** Fraction (0–1) of the window covered by samples. */
   coverageRatio: number;
-  /** Median sampling cadence in minutes, capped — undefined when unknowable. */
-  cadenceMinutes?: number;
 }
 
-/** Parse + sort the series chronologically so gaps are always non-negative. */
+/**
+ * Sort the sample series chronologically. Called ONCE, at the entry point
+ * (`analyzeAirTrend`), so every downstream field is derived from an ordered
+ * series.
+ *
+ * Chronological order is a PRECONDITION of every temporal field this module
+ * emits — `current`, `last_sample_at`, `rate_of_change_per_hour`,
+ * `peak_at`/`trough_at` tie-breaks, and the VOC run detection all read position
+ * in the array as position in time. The provider contract never promised it.
+ * AirGradient happens to return ascending today, but a descending page (or a
+ * future provider, or a merge of two pages) would have made `current` the
+ * OLDEST reading, flipped the sign of `rate_of_change_per_hour`, and — since
+ * 0.6.0 — had `last_sample_at` and the low-coverage note state the oldest
+ * timestamp as "Last sample" with full confidence. Measured on the 0.6.0 build
+ * with a 24-sample series fed newest-first: minutes 120 (correct — the
+ * integrator sorts internally), but current 40 instead of 17, rate +0.75
+ * instead of -0.75, and last_sample_at 00:00 instead of 01:55.
+ *
+ * Samples whose timestamp cannot be parsed cannot be placed in time. They are
+ * kept — their values still count towards mean/median/min/max/samples_analyzed,
+ * and dropping readings silently would be its own defect — but sorted to the
+ * FRONT, so an unplaceable sample can never be reported as the most recent one.
+ * Equal timestamps keep input order (the sort is made stable explicitly rather
+ * than relying on the engine's).
+ */
+function sortSamplesChronologically(samples: TrendSample[]): TrendSample[] {
+  return samples
+    .map((sample, index) => ({ sample, index, t: Date.parse(sample.timestamp ?? "") }))
+    .sort((a, b) => {
+      const aDated = Number.isFinite(a.t);
+      const bDated = Number.isFinite(b.t);
+      if (aDated !== bDated) return aDated ? 1 : -1; // undated first
+      if (aDated && a.t !== b.t) return a.t - b.t;
+      return a.index - b.index; // stable
+    })
+    .map((entry) => entry.sample);
+}
+
+/**
+ * Parse the series into time points. `analyzeAirTrend` already ordered the
+ * samples; the re-sort here is belt-and-braces for direct callers of the
+ * integrator and costs nothing on an already-sorted array.
+ */
 function toTimePoints(values: number[], timestamps: string[]): { t: number; v: number }[] {
   const points: { t: number; v: number }[] = [];
   for (let i = 0; i < values.length; i++) {
@@ -167,6 +243,47 @@ function toTimePoints(values: number[], timestamps: string[]): { t: number; v: n
   }
   points.sort((a, b) => a.t - b.t);
   return points;
+}
+
+/**
+ * Midpoint rule over a chronologically ordered block of instants: how much
+ * wall-clock time each sample stands for.
+ *
+ * Each point is credited half the gap to the previous point plus half the gap
+ * to the next. The two outer edges have no neighbour and are credited half a
+ * typical cadence each (the block's own median gap). Every half-gap is clamped
+ * to `capMs / 2`, where `capMs = min(2 × median gap, MAX_SAMPLE_SPAN_MINUTES)`,
+ * so a reading sitting beside a sensor outage cannot claim the outage.
+ *
+ * Shared by `integrateTimeAboveThreshold` (whole series) and the VOC
+ * observation (one run), so the two can never disagree about how long a block
+ * of samples lasted. Returns [] when the cadence is unknowable (<2 usable
+ * points) — deliberately conservative.
+ */
+function perPointSpansMs(timesMs: number[]): number[] {
+  if (timesMs.length < 2) return [];
+  const gaps: number[] = [];
+  for (let i = 1; i < timesMs.length; i++) {
+    const delta = timesMs[i] - timesMs[i - 1];
+    if (delta > 0) gaps.push(delta);
+  }
+  if (gaps.length === 0) return [];
+
+  const medianGapMs = median([...gaps].sort((a, b) => a - b)) ?? 0;
+  const ceilingMs = MAX_SAMPLE_SPAN_MINUTES * 60_000;
+  // No sample may represent more than 2× the median cadence, nor more than the
+  // absolute ceiling. Applied per side as capMs / 2.
+  const capMs = Math.min(2 * medianGapMs, ceilingMs);
+  // Block edges have no outer neighbour: credit one typical cadence, capped.
+  const edgeMs = Math.min(medianGapMs, capMs);
+
+  const spans: number[] = [];
+  for (let i = 0; i < timesMs.length; i++) {
+    const before = i > 0 ? timesMs[i] - timesMs[i - 1] : edgeMs;
+    const after = i < timesMs.length - 1 ? timesMs[i + 1] - timesMs[i] : edgeMs;
+    spans.push(Math.min(before, capMs) / 2 + Math.min(after, capMs) / 2);
+  }
+  return spans;
 }
 
 /**
@@ -197,31 +314,14 @@ function integrateTimeAboveThreshold(
 ): TimeIntegration {
   const windowMinutes = hours > 0 ? hours * 60 : 0;
   const points = toTimePoints(values, timestamps);
-  if (points.length < 2) return { minutesAbove: 0, coverageRatio: 0 };
-
-  const gaps: number[] = [];
-  for (let i = 1; i < points.length; i++) {
-    const delta = points[i].t - points[i - 1].t;
-    if (delta > 0) gaps.push(delta);
-  }
-  if (gaps.length === 0) return { minutesAbove: 0, coverageRatio: 0 };
-
-  const medianGapMs = median([...gaps].sort((a, b) => a - b)) ?? 0;
-  const ceilingMs = MAX_SAMPLE_SPAN_MINUTES * 60_000;
-  // No sample may represent more than 2× the median cadence, nor more than the
-  // absolute ceiling. Applied per side as capMs / 2.
-  const capMs = Math.min(2 * medianGapMs, ceilingMs);
-  // Series edges have no outer neighbour: credit one typical cadence, capped.
-  const edgeMs = Math.min(medianGapMs, capMs);
+  const spans = perPointSpansMs(points.map((p) => p.t));
+  if (spans.length === 0) return { minutesAbove: 0, coverageRatio: 0 };
 
   let aboveMs = 0;
   let coveredMs = 0;
   for (let i = 0; i < points.length; i++) {
-    const before = i > 0 ? points[i].t - points[i - 1].t : edgeMs;
-    const after = i < points.length - 1 ? points[i + 1].t - points[i].t : edgeMs;
-    const spanMs = Math.min(before, capMs) / 2 + Math.min(after, capMs) / 2;
-    coveredMs += spanMs;
-    if (points[i].v > threshold) aboveMs += spanMs;
+    coveredMs += spans[i];
+    if (points[i].v > threshold) aboveMs += spans[i];
   }
 
   const coveredMinutes = coveredMs / 60_000;
@@ -234,7 +334,6 @@ function integrateTimeAboveThreshold(
   return {
     minutesAbove,
     coverageRatio: round(coverageRatio, 4) ?? 0,
-    cadenceMinutes: round(edgeMs / 60_000, 2),
   };
 }
 
@@ -263,7 +362,12 @@ function extractSeries(samples: TrendSample[], pollutant: TrendPollutant): Extra
  * Rules (intentionally conservative — never invent):
  *  - PM2.5: monotonic-ish climb > 5 µg/m³ across last quartile vs first → combustion / smoke note
  *  - CO2: max < 800 ppm across the whole window → ventilated-period note
- *  - VOC: any contiguous 3+ samples in the window where value > 300 → spike note with timestamp
+ *  - VOC: any contiguous 3+ samples in the window where value > 300 → spike note
+ *    with timestamp, spanning the run's own observed duration
+ *
+ * `values`/`timestamps` must be in chronological order — `analyzeAirTrend`
+ * guarantees it. Quartile comparisons and run detection read array position as
+ * position in time.
  */
 function generateObservation(
   pollutant: TrendPollutant,
@@ -274,7 +378,6 @@ function generateObservation(
   maxValue: number | undefined,
   maxAt: string | undefined,
   hours: number,
-  cadenceMinutes: number | undefined,
 ): string | undefined {
   if (values.length < 4) return undefined;
 
@@ -316,19 +419,36 @@ function generateObservation(
       }
     }
     if (bestRunLen >= 3 && bestRunStart >= 0) {
-      // Span the run over its REAL elapsed time (plus one cadence for the two
-      // half-edges), never over window/sample-count — the same normalization
-      // that used to inflate time_above_threshold_minutes during sensor gaps.
-      const runStartMs = Date.parse(timestamps[bestRunStart] ?? "");
-      const runEndMs = Date.parse(timestamps[bestRunStart + bestRunLen - 1] ?? "");
-      if (!Number.isFinite(runStartMs) || !Number.isFinite(runEndMs) || runEndMs < runStartMs) {
-        return undefined;
+      // Span the run with the midpoint rule over the RUN'S OWN sample spacing.
+      //
+      // 0.6.0 used the run's real elapsed time plus the GLOBAL median cadence,
+      // which is only the run's cadence when the sensor sampled evenly across
+      // the whole window. Test 7's fixture is hourly outside the spike and
+      // half-hourly inside it: a run genuinely spanning 14:30–15:30 was padded
+      // by the global 60 min cadence and announced as a "2-hour spike".
+      // perPointSpansMs derives the padding from the run itself (30 min here),
+      // giving the honest 90 min — and it is the same primitive that produces
+      // time_above_threshold_minutes, so the two can no longer disagree.
+      const runTimes: number[] = [];
+      for (let i = bestRunStart; i < bestRunStart + bestRunLen; i++) {
+        const t = Date.parse(timestamps[i] ?? "");
+        if (!Number.isFinite(t)) return undefined;
+        runTimes.push(t);
       }
-      const spanMinutes = (runEndMs - runStartMs) / 60_000 + (cadenceMinutes ?? 0);
-      const spanHours = Math.max(1, Math.round((spanMinutes / 60) * 10) / 10);
+      const spanMinutes = perPointSpansMs(runTimes).reduce((a, b) => a + b, 0) / 60_000;
+      if (spanMinutes <= 0) return undefined;
+
       const peakIso = maxAt ?? timestamps[bestRunStart];
       const peakLabel = peakIso.slice(11, 16); // HH:MM
-      return `VOC showed a ${spanHours}-hour spike around ${peakLabel} — check cleaning products / cooking activity`;
+      // Report the unit the span actually supports. 0.6.0 floored every span to
+      // "1-hour" (Math.max(1, …)), so a 15-minute spike at a 5-minute cadence
+      // was announced as an hour long — the same class of overstatement as the
+      // padding above, and just as invisible to the caller.
+      const label =
+        spanMinutes < 60
+          ? `${Math.max(1, Math.round(spanMinutes))}-minute`
+          : `${Math.round((spanMinutes / 60) * 10) / 10}-hour`;
+      return `VOC showed a ${label} spike around ${peakLabel} — check cleaning products / cooking activity`;
     }
     return undefined;
   }
@@ -341,6 +461,10 @@ function analyzeOne(
   pollutant: TrendPollutant,
   hours: number,
 ): PerPollutantTrend {
+  // PRECONDITION: `samples` is chronologically ordered (analyzeAirTrend sorts
+  // once at entry). Every temporal field below reads array position as position
+  // in time — `current`, `last_sample_at`, the quartile rate of change, the
+  // peak/trough tie-break, and the VOC run detection.
   const { values, timestamps } = extractSeries(samples, pollutant);
 
   if (values.length === 0) {
@@ -397,7 +521,6 @@ function analyzeOne(
     maxValue,
     peakAt,
     hours,
-    integration.cadenceMinutes,
   );
 
   return {
@@ -436,7 +559,13 @@ function lowCoverageNote(t: PerPollutantTrend, hours: number): string | undefine
   );
 }
 
-/** Pure analysis function — no IO. Use this in tests with synthetic samples. */
+/**
+ * Pure analysis function — no IO. Use this in tests with synthetic samples.
+ *
+ * Accepts samples in ANY order: the series is sorted chronologically here, once,
+ * and every temporal field is derived from the sorted series. The input array is
+ * not mutated.
+ */
 export function analyzeAirTrend(
   samples: TrendSample[],
   hours: number,
@@ -447,9 +576,13 @@ export function analyzeAirTrend(
     notes.push("No samples in window. Trend analysis skipped.");
   }
 
+  // Sort ONCE, here. Provider order is not part of any contract, and every
+  // temporal field downstream depends on it. See sortSamplesChronologically.
+  const ordered = sortSamplesChronologically(samples);
+
   if (pollutant === "all") {
     const pollutants: PerPollutantTrend[] = (["pm25", "co2", "voc"] as TrendPollutant[]).map(
-      (p) => analyzeOne(samples, p, hours),
+      (p) => analyzeOne(ordered, p, hours),
     );
     // Worst pollutant = highest current band rank. Skip pollutants with no current.
     let worst: TrendPollutant | undefined;
@@ -476,7 +609,7 @@ export function analyzeAirTrend(
     };
   }
 
-  const trend = analyzeOne(samples, pollutant, hours);
+  const trend = analyzeOne(ordered, pollutant, hours);
   const note = lowCoverageNote(trend, hours);
   if (note) notes.push(note);
   return {

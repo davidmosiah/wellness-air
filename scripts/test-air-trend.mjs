@@ -10,6 +10,10 @@
  *  - peak_at + trough_at correct
  *  - time_above_threshold_minutes integrates REAL sample spacing (test 8):
  *    sensor gaps must not inflate it, and coverage must be announced
+ *  - temporal fields survive any input order (test 9): provider row order is
+ *    not a contract, and current / last_sample_at / rate_of_change assumed it
+ *  - VOC spike span is measured with the RUN's cadence (test 10), not the
+ *    window's global one, and short spikes are not inflated to "1-hour"
  */
 import assert from "node:assert/strict";
 import { analyzeAirTrend, formatAirTrendMarkdown } from "../dist/services/air-trend.js";
@@ -314,6 +318,230 @@ const endIso = "2026-05-20T18:00:00.000Z";
     assert.ok(md.includes("Window coverage"), "markdown should surface coverage");
     assert.ok(md.includes("Notes"), "markdown should surface the coverage note");
     console.log("✓ 8f low coverage surfaced in notes + markdown, not silent");
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Test 9: temporal fields must not depend on the order the provider returned
+// rows in.
+//
+// 0.6.0 read array position as position in time — `current` was
+// `values[values.length - 1]`, `last_sample_at` was `timestamps[last]`, and the
+// rate of change compared the first quarter of the ARRAY to the last quarter.
+// The integrator sorts internally, so minutes and coverage were already robust;
+// nothing else was. AirGradient happens to return ascending, but that was never
+// a contract, and 0.6.0 additionally began STATING the assumption out loud
+// ("Last sample: X", "current may be stale") — a wrong claim made with
+// confidence is worse than the silence it replaced.
+//
+// Measured on the 0.6.0 build with this exact fixture fed newest-first:
+//   time_above_threshold_minutes  120        (correct — integrator sorts)
+//   current                        40        (should be 17 — that is the OLDEST)
+//   rate_of_change_per_hour     +0.75        (should be -0.75 — sign flipped)
+//   last_sample_at    ...T00:00:00Z          (should be ...T01:55:00Z)
+//   low-coverage note quotes that same oldest timestamp as "Last sample"
+// ────────────────────────────────────────────────────────────────────────────
+{
+  const base = Date.parse("2026-05-20T00:00:00.000Z");
+  const iso = (ms) => new Date(ms).toISOString();
+  const FIVE_MIN = 5 * 60 * 1000;
+
+  // 24 samples every 5 min, PM2.5 falling 40 → 17. Strictly decreasing, so the
+  // true newest reading (17) and the true oldest (40) can never be confused.
+  const ascending = [];
+  for (let i = 0; i < 24; i++) {
+    ascending.push({ timestamp: iso(base + i * FIVE_MIN), pm25: 40 - i });
+  }
+  const OLDEST = ascending[0].timestamp; // 00:00
+  const NEWEST = ascending[23].timestamp; // 01:55
+
+  const descending = [...ascending].reverse();
+  // Also shuffle deterministically: "sorted enough to look fine" is the failure
+  // mode a merged/paged response actually produces.
+  const shuffled = [...ascending];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = (i * 7 + 3) % (i + 1); // deterministic, no RNG
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  const expected = analyzeAirTrend(ascending, 24, "pm25");
+
+  for (const [label, samples] of [
+    ["newest-first", descending],
+    ["shuffled", shuffled],
+  ]) {
+    const result = analyzeAirTrend(samples, 24, "pm25");
+    const t = result.trend;
+
+    assert.equal(
+      t.last_sample_at,
+      NEWEST,
+      `${label}: last_sample_at must be the NEWEST sample (${NEWEST}), got ${t.last_sample_at}`,
+    );
+    assert.notEqual(t.last_sample_at, OLDEST, `${label}: last_sample_at is the oldest sample`);
+    assert.equal(
+      t.current,
+      17,
+      `${label}: current must be the newest reading (17), got ${t.current}`,
+    );
+    assert.ok(
+      t.rate_of_change_per_hour < 0,
+      `${label}: series falls over time, rate must be negative; got ${t.rate_of_change_per_hour}`,
+    );
+    assert.equal(
+      t.peak_at,
+      OLDEST,
+      `${label}: peak (40) is the oldest sample; got ${t.peak_at}`,
+    );
+    assert.equal(
+      t.trough_at,
+      NEWEST,
+      `${label}: trough (17) is the newest sample; got ${t.trough_at}`,
+    );
+
+    // Whole-object equality: order must not change ANY field, not just the ones
+    // enumerated above — that is what stops the next temporal field from
+    // silently inheriting the same assumption.
+    assert.deepEqual(
+      t,
+      expected.trend,
+      `${label}: analysis must be identical to the ascending series`,
+    );
+
+    // The coverage note quotes last_sample_at — the note must not assert the
+    // oldest timestamp as the most recent reading.
+    const note = result.notes.find((n) => n.includes("pm25"));
+    assert.ok(note, `${label}: expected a low-coverage note`);
+    assert.ok(
+      note.includes(NEWEST),
+      `${label}: note must quote the newest sample; got "${note}"`,
+    );
+    assert.ok(
+      !note.includes(OLDEST),
+      `${label}: note quotes the OLDEST sample as "Last sample"; got "${note}"`,
+    );
+    console.log(`✓ 9 ${label} series → identical analysis, last_sample_at = newest`);
+  }
+
+  // Unparseable timestamps must still be counted, but must never be reported as
+  // the most recent sample — they cannot be placed in time at all.
+  {
+    const withBadTs = [
+      { timestamp: "not-a-timestamp", pm25: 999 },
+      ...descending,
+    ];
+    const t = analyzeAirTrend(withBadTs, 24, "pm25").trend;
+    assert.equal(t.samples_analyzed, 25, "undated sample should still be counted");
+    assert.equal(t.max, 999, "undated sample's value should still reach min/max/mean");
+    assert.equal(
+      t.last_sample_at,
+      NEWEST,
+      `undated sample must not become last_sample_at; got ${t.last_sample_at}`,
+    );
+    console.log("✓ 9 undated sample counted but never reported as the latest");
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Test 10: the VOC spike observation must span the RUN, measured with the run's
+// own sampling cadence.
+//
+// 0.6.0 padded the run's real elapsed time with the GLOBAL median cadence,
+// which equals the run's cadence only when the sensor sampled evenly across the
+// whole window. Measured on the 0.6.0 build:
+//   run 14:30→15:30 (30-min cadence) in an hourly window  → "2-hour spike"
+//   the same run in a 10-min-cadence window               → "1.2-hour spike"
+// One physical event, two different durations, both wrong. And every span below
+// an hour was floored to "1-hour" by a Math.max(1, …), so a 15-minute spike was
+// announced as an hour long.
+// ────────────────────────────────────────────────────────────────────────────
+{
+  const base = Date.parse("2026-05-20T00:00:00.000Z");
+  const iso = (ms) => new Date(ms).toISOString();
+
+  // The run itself: three samples above 300, spanning 14:30 → 15:30. Midpoint
+  // rule over its own 30-min cadence = 60 min elapsed + 30 min of edges = 90 min.
+  const RUN = [
+    { timestamp: "2026-05-20T14:30:00.000Z", voc: 380 },
+    { timestamp: "2026-05-20T15:00:00.000Z", voc: 420 },
+    { timestamp: "2026-05-20T15:30:00.000Z", voc: 350 },
+  ];
+
+  // 10a — sparse baseline (hourly). Global median cadence 60 min.
+  const sparse = [
+    { timestamp: "2026-05-20T10:00:00.000Z", voc: 80 },
+    { timestamp: "2026-05-20T11:00:00.000Z", voc: 90 },
+    { timestamp: "2026-05-20T12:00:00.000Z", voc: 100 },
+    { timestamp: "2026-05-20T13:00:00.000Z", voc: 110 },
+    ...RUN,
+    { timestamp: "2026-05-20T16:00:00.000Z", voc: 120 },
+  ];
+
+  // 10b — dense baseline (every 10 min, 08:00–13:00), IDENTICAL run.
+  // Global median cadence 10 min.
+  const dense = [];
+  for (let m = 0; m <= 300; m += 10) {
+    dense.push({ timestamp: iso(Date.parse("2026-05-20T08:00:00.000Z") + m * 60_000), voc: 100 });
+  }
+  dense.push(...RUN, { timestamp: "2026-05-20T16:00:00.000Z", voc: 120 });
+
+  const sparseObs = analyzeAirTrend(sparse, 6, "voc").trend.observation;
+  const denseObs = analyzeAirTrend(dense, 8, "voc").trend.observation;
+
+  assert.ok(sparseObs, "sparse fixture should produce a VOC observation");
+  assert.ok(denseObs, "dense fixture should produce a VOC observation");
+
+  // Numeric assertion on the span itself, not just "mentions spike".
+  const spanOf = (obs) => {
+    const m = obs.match(/a ([\d.]+)-(hour|minute) spike/);
+    assert.ok(m, `could not parse a span out of: ${obs}`);
+    return m[2] === "hour" ? Number(m[1]) * 60 : Number(m[1]);
+  };
+
+  assert.equal(
+    spanOf(sparseObs),
+    90,
+    `run 14:30→15:30 at 30-min cadence spans 90 min (was 120 — global cadence padding); got: ${sparseObs}`,
+  );
+  assert.equal(
+    spanOf(denseObs),
+    spanOf(sparseObs),
+    `same physical run must report the same span regardless of baseline cadence: ` +
+      `sparse="${sparseObs}" dense="${denseObs}"`,
+  );
+  assert.ok(
+    sparseObs.includes("1.5-hour spike"),
+    `expected "1.5-hour spike"; got: ${sparseObs}`,
+  );
+  console.log("✓ 10a/b VOC span = 90 min from the run's own cadence, baseline-independent");
+
+  // 10c — a short spike must not be inflated to an hour. Three samples at a
+  // 5-min cadence span 15 min (10 min elapsed + 5 min of edges).
+  {
+    const samples = [];
+    for (let i = 0; i < 12; i++) {
+      samples.push({ timestamp: iso(base + i * 5 * 60_000), voc: i >= 4 && i <= 6 ? 380 : 100 });
+    }
+    const obs = analyzeAirTrend(samples, 1, "voc").trend.observation;
+    assert.ok(obs, "expected a VOC observation for the short spike");
+    assert.equal(
+      spanOf(obs),
+      15,
+      `three samples 5 min apart span 15 min, not an hour (was "1-hour"); got: ${obs}`,
+    );
+    assert.ok(obs.includes("15-minute spike"), `expected "15-minute spike"; got: ${obs}`);
+    console.log("✓ 10c 15-minute spike reported in minutes, not floored to '1-hour'");
+  }
+
+  // 10d — the observation must not depend on input order either.
+  {
+    const reversed = [...sparse].reverse();
+    assert.equal(
+      analyzeAirTrend(reversed, 6, "voc").trend.observation,
+      sparseObs,
+      "VOC observation must survive a newest-first series",
+    );
+    console.log("✓ 10d VOC observation identical on a newest-first series");
   }
 }
 
