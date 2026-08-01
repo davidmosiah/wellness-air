@@ -630,13 +630,18 @@ export function registerAirTools(server: McpServer): void {
     {
       title: "Air demo",
       description:
-        "Returns a realistic example payload of what air_current_reading + air_daily_summary look like in practice. Use this to help users understand what the connector will return BEFORE they configure anything.",
+        "Returns a realistic example payload of what air_current_reading + air_aqi_check + air_daily_summary look like in practice. Use this to help users understand what the connector will return BEFORE they configure anything. The field names and nesting are not hand-maintained guesses: scripts/demo-contract-test.mjs runs the real handlers over a synthetic sensor fixture and fails the build if this sample invents a key or omits one.",
       inputSchema: {},
     },
     async () => {
+      // Keep this in the shape the handlers actually emit. `pm10` is part of the
+      // AirReading envelope all three provider paths fill — omitting it here
+      // taught agents the field does not exist (drift fixed in 0.7.0, now held
+      // by scripts/demo-contract-test.mjs).
       const sampleReading: AirReading = {
         timestamp: new Date().toISOString(),
         pm25: 18.4,
+        pm10: 12.7,
         co2: 612,
         tvoc: 92,
         nox: 1,
@@ -673,6 +678,13 @@ export function registerAirTools(server: McpServer): void {
             notes: ["v0.1 snapshot; rolling daily aggregation lands in v0.2."],
           },
         },
+        notes: [
+          "All sample values are synthetic and tagged is_demo=true; locationId 654321 is a placeholder, not a real sensor.",
+          "Field names and nesting match the real handlers — scripts/demo-contract-test.mjs fails the build if this sample invents a key or omits one.",
+          "Every field of `reading` except `timestamp` is optional: a sensor that does not measure a pollutant simply omits that key, so parse defensively.",
+          "`reading.pm10` carries PM1.0 for AirGradient (mapped from `pm01`) and PM10 for PurpleAir/AirThings — check `provider` before comparing it against a PM10 threshold.",
+          "Real calls hit the configured provider; nothing here was fetched.",
+        ],
       });
     },
   );

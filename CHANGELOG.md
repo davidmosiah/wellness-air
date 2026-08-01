@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.0 — 2026-08-01
+
+### Fixed
+
+- **`air_demo` — the tool whose entire job is to show an agent the contract *before* it parses a real reading — omitted `pm10` from both sample readings, so an agent that trusted the demo wrote a parser blind to a field every provider path fills.** `air_current_reading.reading` and `air_daily_summary.snapshot` are the same `AirReading` envelope the handlers emit, and that envelope has carried `pm10` since 0.3 (AirGradient maps it from `pm01`, PurpleAir from `pm10.0_atm`, AirThings from `pm10`). The demo listed `pm25`, `co2`, `tvoc`, `nox`, `temperature_c`, `humidity`, `aqi` and stopped. The failure mode is quiet in the worst way: nothing errors, the agent simply never looks for a pollutant it was told did not exist — and `air_health_bands` bands PM10 separately, so an agent building its own band logic off the demo silently drops one of the four pollutants this server classifies. Verified by running the real handlers: `reading.pm10` and `snapshot.pm10` were the exact two key paths missing, and no key in the demo was invented.
+- `air_demo`'s description advertised "`air_current_reading` + `air_daily_summary`" while the payload has returned three samples — `air_aqi_check` included — since 0.1.
+
+### Added
+
+- **`scripts/demo-contract-test.mjs`, wired into `npm test`: a gate that runs the REAL `air_current_reading` / `air_aqi_check` / `air_daily_summary` handlers over a synthetic sensor fixture and compares key paths against `air_demo` in BOTH directions** — a key the demo invents *and* a key the contract has that the demo omits. Both directions were proven to fail on demand before this shipped: injecting a plausible `aqi_trend` into the `air_aqi_check` sample exits 1 ("keys in the demo that the real handler NEVER returns"), deleting `co2`/`tvoc`/`nox` from the sample reading exits 1 with all 6 affected paths (`reading.*` and `snapshot.*`), and the shipped demo exits 0 at 36 key paths. The gate also caught the `pm10` drift above on untouched code — it is not a test written to pass.
+  - The handlers are captured through `registerAirTools` itself, decorator included, so the gate compares against the payload the MCP server actually serves, parsed from `content[0].text` — the same JSON an agent receives, with `undefined`-valued keys already dropped.
+  - `globalThis.fetch` is replaced and throws on any URL other than the AirGradient public world feed, so the gate needs no network and a handler that started calling elsewhere fails loudly instead of passing quietly.
+  - `CONDITIONAL_ON_REQUEST` is the single reviewable place to record a key that only exists for a specific call shape (today: `privacy_mode`, echoed only when the caller passes it). Widening it to silence a failure is how the drift got in.
+- `fixtures/airgradient-world-current.json` — a synthetic two-row AirGradient world feed. Fully fake: `locationId` 999001/999002, coordinates `0,0`, `SYNTHETIC-0000` serial. It deliberately carries the positional and identifying columns (`latitude`, `longitude`, `serialNumber`, `locationName`) the mapper drops, so the gate can assert the demo never re-teaches a contract the server does not have.
+- `air_demo` now returns top-level `notes`: that the sample is synthetic and the `locationId` a placeholder, that every `reading` field except `timestamp` is optional so parsing must be defensive, that the shape is gate-enforced rather than hand-maintained, and that **`reading.pm10` carries PM1.0 for AirGradient and PM10 for PurpleAir/AirThings** — the same key, two different physical quantities, so an agent must check `provider` before comparing it to a PM10 threshold. That ambiguity is documented here rather than fixed: renaming the field changes the response contract of every read tool and belongs with its own bump.
+
+### Changed
+
+- Minor bump, not patch: `air_demo`'s payload gains `sample.*.reading.pm10` / `sample.*.snapshot.pm10` and a top-level `notes` array. No handler response changed — only the example of it. Nothing was removed or renamed.
+
 ## 0.6.1 — 2026-08-01
 
 ### Fixed

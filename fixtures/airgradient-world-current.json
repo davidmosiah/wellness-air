@@ -1,0 +1,25 @@
+[
+  {
+    "locationId": 999001,
+    "locationName": "SYNTHETIC SENSOR — not a real AirGradient location",
+    "latitude": 0,
+    "longitude": 0,
+    "serialNumber": "SYNTHETIC-0000",
+    "pm01": 9.2,
+    "pm02": 18.4,
+    "rco2": 612,
+    "tvoc_index": 92,
+    "nox_index": 1,
+    "atmp": 23.7,
+    "rhum": 48,
+    "timestamp": "2026-05-01T14:00:00.000Z"
+  },
+  {
+    "locationId": 999002,
+    "locationName": "SYNTHETIC SENSOR — second row, proves locationId filtering",
+    "latitude": 0,
+    "longitude": 0,
+    "pm02": 3.1,
+    "timestamp": "2026-05-01T14:00:00.000Z"
+  }
+]
