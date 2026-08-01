@@ -799,7 +799,7 @@ export function registerAirTools(server: McpServer): void {
     {
       title: "Air trend",
       description:
-        "Windowed trend analysis for PM2.5 / CO2 / VOC. Pulls past measurements from AirGradient (public or owned) and returns per-pollutant mean / median / min / max / current / rate_of_change_per_hour / peak_at / trough_at / time_above_threshold_minutes plus an optional natural-language observation (only when the data supports one). Pass `pollutant: 'all'` (default) for an array of per-pollutant trends plus `worst_pollutant` per current WHO/ASHRAE bands. Use this for 'is PM2.5 climbing?' / 'was CO2 stable overnight?' / 'when did VOC spike?' kinds of questions.",
+        "Windowed trend analysis for PM2.5 / CO2 / VOC. Pulls past measurements from AirGradient (public or owned) and returns per-pollutant mean / median / min / max / current / rate_of_change_per_hour / peak_at / trough_at / time_above_threshold_minutes plus an optional natural-language observation (only when the data supports one). `time_above_threshold_minutes` integrates real sample spacing, so sensor downtime lowers it instead of inflating it; check `coverage_ratio` (0–1 fraction of the window the sensor actually reported) and `last_sample_at` before treating it — or `current` — as a full-window figure. Pass `pollutant: 'all'` (default) for an array of per-pollutant trends plus `worst_pollutant` per current WHO/ASHRAE bands. Use this for 'is PM2.5 climbing?' / 'was CO2 stable overnight?' / 'when did VOC spike?' kinds of questions.",
       inputSchema: AirTrendInputSchema,
       annotations: {
         readOnlyHint: true,

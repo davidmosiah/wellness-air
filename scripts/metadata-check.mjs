@@ -20,6 +20,18 @@ else {
   }
 }
 
+// The runtime version lives in a third place (src/constants.ts) and has drifted
+// from package.json before. Check it here so a bump cannot land half-applied.
+const constants = readFileSync("src/constants.ts", "utf8");
+const serverVersionMatch = constants.match(/SERVER_VERSION\s*=\s*"([^"]+)"/);
+if (!serverVersionMatch) {
+  errors.push("src/constants.ts does not export a parseable SERVER_VERSION");
+} else if (serverVersionMatch[1] !== pkg.version) {
+  errors.push(
+    `src/constants.ts SERVER_VERSION ${serverVersionMatch[1]} does not match package.json ${pkg.version}`,
+  );
+}
+
 if (errors.length > 0) {
   for (const e of errors) console.error(`- ${e}`);
   process.exit(1);

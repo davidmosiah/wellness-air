@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0 — 2026-08-01
+
+### Fixed
+
+- **`air_trend` reported wildly inflated `time_above_threshold_minutes` whenever the sensor had gaps — the worse the sensor coverage, the bigger the number.** An agent asking "how long was PM2.5 above the WHO guideline today?" got 1440 minutes (the entire day) for a two-hour PM2.5 event, purely because the sensor was offline for the other 22 hours. Any downstream advice — "you were exposed all day, consider an air purifier", a correlation against sleep or recovery data, a health-band summary — was built on a number that was up to 144× the truth. The measured cases: a contiguous two-hour peak with a healthy sensor read a correct 120 min; the *same physical peak* with the sensor offline the rest of the day read 1440 min (12×); two samples 24 h apart with the last one above threshold read 720 min (144×); and 24 above-threshold samples confined to the first two hours of the window read 1440 min (12×). Reachable through the default call path (`hours: 24`, `pollutant: "all"`), so this affected ordinary usage, not an edge case.
+  - **Root cause:** the estimator never received the sample timestamps it needed. It computed `minutesPerSample = (hours * 60) / values.length` — dividing the *nominal window* by the sample count — and multiplied by the number of samples above threshold. That normalization silently assumes the sensor covered the whole window, so every missing sample redistributed its time onto the samples that survived. Fewer samples meant more minutes each. (Had it used the sensor's real ~5-minute cadence, the arithmetic would have been right; the window-normalization *was* the bug.) `analyzeOne()` already held the timestamps from `extractSeries()` and simply did not pass them down.
+  - **Fix:** `time_above_threshold_minutes` now integrates over the real elapsed time between neighbouring samples (midpoint rule): each sample is credited half the gap to the previous sample plus half the gap to the next. No sample may be credited more than `min(2 × median cadence, 60 min)`, so a reading sitting next to a sensor outage cannot claim the outage. The result no longer depends on the requested window size at all — the same 24 samples now return the same minutes whether analysed over 2 h or 24 h.
+- The `air_trend` VOC observation ("VOC showed a *N*-hour spike around HH:MM") measured the spike with the same window-normalized arithmetic and was inflated by sensor gaps in the same way. It now spans the run's real elapsed time.
+- `formatAirTrendMarkdown` never rendered `notes`, so callers using `response_format: "markdown"` could not see any window caveat. Notes are now rendered.
+
+### Added
+
+- **`coverage_ratio` (0–1) and `last_sample_at` on every `air_trend` per-pollutant result.** `coverage_ratio` is the fraction of the requested window actually covered by samples; below 0.75 `air_trend` now emits an explicit note that `time_above_threshold_minutes` is a floor rather than a full-window measurement and that `current` may be stale. This closes a second silent failure: `current` is the newest *sample*, which during an outage can be hours old, and nothing in the response said so.
+- Regression fixture `scripts/test-air-trend.mjs` test 8 (6 synthetic cases): the contiguous-peak control, the same peak behind a 22 h sensor gap, two samples 24 h apart, an above-threshold block at the window start, window-size independence, and the low-coverage note reaching both JSON and Markdown. Verified to fail against the 0.5.8 build and pass against this one. All 7 pre-existing cases still pass unchanged.
+- `scripts/metadata-check.mjs` now also verifies `SERVER_VERSION` in `src/constants.ts` against `package.json`. It previously checked only `package.json` ↔ `server.json`, and the runtime version had drifted twice before.
+
+### Changed
+
+- Minor bump rather than patch: `air_trend` output gains two fields and the semantics of `time_above_threshold_minutes` change (it is now a measurement of observed time, not a share of the window).
+
 ## 0.5.8 — 2026-07-30
 
 ### Added
