@@ -33,6 +33,19 @@
 
 ---
 
+## HTTP (v2 stateless)
+
+Default is **stdio**. Optional Streamable HTTP — no session id, JSON responses, loopback only:
+
+```bash
+npx -y wellness-air --http
+# GET  http://127.0.0.1:3000/health
+# POST http://127.0.0.1:3000/mcp   (sessionless)
+```
+
+Env: `WELLNESS_AIR_HOST`, `WELLNESS_AIR_PORT`, `WELLNESS_AIR_TRANSPORT=http`.
+
+
 <!-- /delx-wellness header v2 -->
 
 ## Overview
