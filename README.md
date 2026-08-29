@@ -162,3 +162,13 @@ Run `wellness-air doctor` to inspect the local privacy posture. Highlights:
 MIT — see [LICENSE](LICENSE).
 
 <sub>wellness-air is an unofficial connector. AirGradient, AirThings, PurpleAir, IQAir, and Awair are trademarks of their respective owners. None of those companies are affiliated with or endorse this project.</sub>
+
+## Skill or MCP
+
+Same package, two doors. MCP registers tools on stdio/HTTP. The [skill](skill/SKILL.md) can drive the **same** tools through the CLI when the client has no MCP:
+
+```bash
+npx -y wellness-air call air_connection_status --json '{}'
+```
+
+Copy `skill/SKILL.md` into your agent skills dir.

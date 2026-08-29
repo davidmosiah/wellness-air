@@ -44,3 +44,6 @@ Safety:
 - Provider tokens are never returned to the agent.
 - AQI band recommendations are heuristic; refer to local public-health agencies for action thresholds.
 - Not affiliated with AirGradient, AirThings, PurpleAir, IQAir, or Awair.
+
+Skill (same gates, no MCP client required): skill/SKILL.md
+npx -y wellness-air call <tool> --json '{...}'

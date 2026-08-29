@@ -2,6 +2,7 @@ import { NPM_PACKAGE_NAME, SERVER_VERSION, SUPPORTED_PROVIDERS } from "../consta
 import { AirGradientClient, aqiBand } from "../services/airgradient-client.js";
 import { buildCapabilities } from "../services/capabilities.js";
 import { buildPrivacyAudit } from "../services/privacy-audit.js";
+import { runToolCall } from "./tool-calls.js";
 import {
   getOnboardingFlow,
   getProfile,
@@ -9,7 +10,7 @@ import {
   missingCriticalFields,
 } from "../services/profile-store.js";
 
-const COMMANDS = new Set(["status", "doctor", "setup", "current", "onboarding"]);
+const COMMANDS = new Set(["call", "status", "doctor", "setup", "current", "onboarding"]);
 
 function printCommunityCTA(): void {
   if (process.env.WELLNESS_AIR_QUIET === "1") return;
@@ -32,6 +33,8 @@ export async function runCliCommand(args: string[]): Promise<number> {
   const [command, ...rest] = args;
   try {
     switch (command) {
+      case "call":
+        return runToolCall(rest);
       case "status":
         return printStatus();
       case "doctor":
