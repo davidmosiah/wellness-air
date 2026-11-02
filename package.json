@@ -1,7 +1,7 @@
 {
   "name": "wellness-air",
   "version": "0.7.3",
-  "description": "Local-first air quality MCP for AI agents \u2014 AirGradient (open hardware), AirThings, PurpleAir, IQAir AirVisual, Awair. Correlate AQI with sleep, recovery, and wellness.",
+  "description": "Local-first air quality MCP for AI agents — AirGradient (open hardware), AirThings, PurpleAir, IQAir AirVisual, Awair. Correlate AQI with sleep, recovery, and wellness.",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -29,9 +29,10 @@
     "test:air-trend": "node scripts/test-air-trend.mjs",
     "test:providers": "node scripts/provider-contract-test.mjs",
     "test:demo-contract": "node scripts/demo-contract-test.mjs",
-    "test": "npm run typecheck && npm run build && npm run smoke && npm run test:metadata && npm run test:air-trend && npm run test:providers && npm run test:demo-contract && npm run test:skill-surface",
+    "test": "npm run typecheck && npm run build && npm run smoke && npm run test:metadata && npm run test:air-trend && npm run test:providers && npm run test:demo-contract && npm run test:skill-surface && npm run test:input-limits",
     "prepublishOnly": "npm test",
-    "test:skill-surface": "node scripts/test-skill-surface.mjs"
+    "test:skill-surface": "node scripts/test-skill-surface.mjs",
+    "test:input-limits": "node scripts/input-limits-test.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -60,10 +61,10 @@
     "delx-wellness"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
@@ -78,11 +79,11 @@
   },
   "main": "dist/index.js",
   "overrides": {
-    "qs": "6.15.2",
-    "hono": "4.13.1",
-    "fast-uri": "3.1.5",
-    "ip-address": "10.4.0",
-    "@hono/node-server": "2.1.0",
-    "body-parser": "2.3.0"
+    "qs": "6.16.1",
+    "hono": "4.13.11",
+    "fast-uri": "3.1.9",
+    "ip-address": "10.7.4",
+    "@hono/node-server": "2.1.3",
+    "body-parser": "2.4.0"
   }
 }
