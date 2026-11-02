@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { localHttpHost, formatLocalHttpOrigin } from "./services/local-http-host.js";
 import cors from "cors";
 import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -24,9 +25,11 @@ async function runStdio(): Promise<void> {
 
 async function runHttp(): Promise<void> {
   const app = express();
-  const host = process.env.WELLNESS_AIR_HOST ?? DEFAULT_HOST;
+  const configuredHost = process.env.WELLNESS_AIR_HOST ?? DEFAULT_HOST;
+  const host = localHttpHost(configuredHost);
+  const originHost = configuredHost.toLowerCase() === "localhost" ? "localhost" : host;
   const port = Number(process.env.WELLNESS_AIR_PORT ?? DEFAULT_PORT);
-  const allowedOrigin = process.env.WELLNESS_AIR_ALLOWED_ORIGIN ?? `http://${host}:${port}`;
+  const allowedOrigin = process.env.WELLNESS_AIR_ALLOWED_ORIGIN ?? formatLocalHttpOrigin(originHost, port);
 
   app.use(express.json({ limit: "1mb", inflate: false }));
   app.use(cors({ origin: allowedOrigin }));
@@ -57,7 +60,7 @@ async function runHttp(): Promise<void> {
   });
 
   app.listen(port, host, () => {
-    console.error(`${SERVER_NAME} HTTP transport listening on http://${host}:${port}/mcp`);
+    console.error(`${SERVER_NAME} HTTP transport listening on ${formatLocalHttpOrigin(host, port)}/mcp`);
   });
 }
 
