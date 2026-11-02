@@ -38,7 +38,7 @@
 Default is **stdio**. Optional Streamable HTTP — no session id, JSON responses, loopback only:
 
 ```bash
-npx -y wellness-air --http
+npx -y wellness-air@0.8.0 --http
 # GET  http://127.0.0.1:3000/health
 # POST http://127.0.0.1:3000/mcp   (sessionless)
 ```
@@ -61,8 +61,8 @@ Wellness Air is a local MCP server that exposes air-quality readings to any MCP-
 # Swap in one near you from https://www.airgradient.com/map/ — copy the numeric
 # locationId from the URL.
 
-WELLNESS_AIR_DEFAULT_LOCATION=89 npx -y wellness-air doctor
-WELLNESS_AIR_DEFAULT_LOCATION=89 npx -y wellness-air current
+WELLNESS_AIR_DEFAULT_LOCATION=89 npx -y wellness-air@0.8.0 doctor
+WELLNESS_AIR_DEFAULT_LOCATION=89 npx -y wellness-air@0.8.0 current
 ```
 
 That's it — no token, no signup, no telemetry. Public reads use AirGradient's
@@ -75,7 +75,7 @@ token-free worldwide feed, so any locationId in that feed works out of the box.
   "mcpServers": {
     "wellness-air": {
       "command": "npx",
-      "args": ["-y", "wellness-air"],
+      "args": ["-y", "wellness-air@0.8.0"],
       "env": {
         "WELLNESS_AIR_DEFAULT_PROVIDER": "airgradient",
         "WELLNESS_AIR_DEFAULT_LOCATION": "89"
@@ -168,7 +168,18 @@ MIT — see [LICENSE](LICENSE).
 Same package, two doors. MCP registers tools on stdio/HTTP. The [skill](skill/SKILL.md) can drive the **same** tools through the CLI when the client has no MCP:
 
 ```bash
-npx -y wellness-air call air_connection_status --json '{}'
+npx -y wellness-air@0.8.0 call air_connection_status --json '{}'
 ```
 
 Copy `skill/SKILL.md` into your agent skills dir.
+
+## 0.8.0 — candidate (2026-11-02)
+
+This is a release candidate, not evidence of an npm publication. Existing installations are not updated automatically.
+
+### Migration and security boundaries
+
+- HTTP transport accepts loopback only. LAN addresses and wildcard binds are rejected; use stdio or a local loopback client instead.
+- Wellness profiles are validated, limited to 256 KiB, and protected with a cooperative lock. Oversized or invalid existing profiles must be corrected before use. Symbolic links, including dangling links and legacy profile paths, are rejected. These checks do not guarantee safety against a hostile local filesystem or non-cooperating processes.
+- MCP inputs have a 10,000-element budget and HTTP bodies are limited to 1 MiB; compressed request bodies are rejected. Previously accepted oversized requests may now fail; reduce request sizes rather than disabling validation.
+- Dependency fixes are included. Upgrade explicitly after publication and restart the connector; old installations retain their previous behavior.

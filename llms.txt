@@ -5,7 +5,7 @@ Local-first air-quality MCP for AI agents. v0.1 ships first-class AirGradient su
 Repository: https://github.com/davidmosiah/wellness-air
 NPM: https://www.npmjs.com/package/wellness-air
 Docs: https://wellness.delx.ai/connectors/air
-Primary command: npx -y wellness-air doctor
+Primary command: npx -y wellness-air@0.8.0 doctor
 MCP command: wellness-air-mcp
 
 Core tools (10):
@@ -46,4 +46,4 @@ Safety:
 - Not affiliated with AirGradient, AirThings, PurpleAir, IQAir, or Awair.
 
 Skill (same gates, no MCP client required): skill/SKILL.md
-npx -y wellness-air call <tool> --json '{...}'
+npx -y wellness-air@0.8.0 call <tool> --json '{...}'
