@@ -14,7 +14,7 @@ Same binary either way. Do not duplicate the API client.
 **MCP** — tools appear natively after stdio/HTTP config:
 
 ```json
-{ "mcpServers": { "wellness-air": { "command": "npx", "args": ["-y", "wellness-air"] } } }
+{ "mcpServers": { "wellness-air": { "command": "npx", "args": ["-y", "wellness-air@0.8.0"] } } }
 ```
 
 Do not put mutation flags in that snippet.
@@ -22,7 +22,7 @@ Do not put mutation flags in that snippet.
 **Skill / CLI** — no MCP client required. Same tools:
 
 ```bash
-npx -y wellness-air call air_connection_status --json '{}'
+npx -y wellness-air@0.8.0 call air_connection_status --json '{}'
 ```
 
 If MCP tools named `air_*` are already available, use them. Do not also shell out.
