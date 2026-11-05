@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "wellness-air": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "wellness-air@0.7.3"
+      ],
+      "cwd": "${PLUGIN_DATA}"
+    }
+  }
+}
