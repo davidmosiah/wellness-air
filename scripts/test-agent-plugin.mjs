@@ -15,6 +15,6 @@ for (const key of expectedKeys) {
 }
 assert.equal(server.type, 'stdio');
 assert.equal(server.command, 'npx');
-assert.deepEqual(server.args, ['-y', "wellness-air@0.7.3"]);
+assert.deepEqual(server.args, ['-y', "wellness-air@0.8.0"]);
 assert.equal(server.cwd, '${PLUGIN_DATA}');
 console.log('Agent plugin optional credential and launch contracts passed');

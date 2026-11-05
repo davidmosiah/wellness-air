@@ -6,7 +6,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "wellness-air@0.7.3"
+        "wellness-air@0.8.0"
       ],
       "cwd": "${PLUGIN_DATA}",
       "env": {
