@@ -21,6 +21,10 @@ npx -y wellness-air@0.8.0 doctor
 
 Public sensors need no setup: find a sensor with air_search_public_sensors (or on airgradient.com/map) and pass its locationId. Owned sensors need provider credentials in the user's environment before Hermes starts: `AIRGRADIENT_API_TOKEN`, `AIRTHINGS_CLIENT_ID` together with `AIRTHINGS_CLIENT_SECRET`, or `PURPLEAIR_API_KEY`. The plugin explicitly forwards only these optional credentials; unset or empty values are omitted by Hermes. Public AirGradient reads still need no key.
 
+## Existing installations
+
+After a plugin update, existing profiles may need attention: field validation, a 256 KiB JSON limit and rejection of symbolic-link profile paths now apply. Older profile writers do not honor the cooperative lock. Do not reset user data or remove an active lock to work around an error; consult the [profile storage and recovery guidance](https://github.com/davidmosiah/wellness-air/blob/main/docs/profile-storage.md) and [release migration notes](https://github.com/davidmosiah/wellness-air/blob/main/CHANGELOG.md). Keep MCP inputs within the 10,000-element budget.
+
 ## Safety
 
 - Tools that change local state: air_profile_update (local preferences only). Use them only when the user asks.
