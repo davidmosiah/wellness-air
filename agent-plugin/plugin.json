@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "wellness-air",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "description": "Check indoor and outdoor air quality (PM2.5, PM10, CO2, TVOC, AQI) with the local wellness-air MCP server, using public AirGradient sensors or the user's own monitors.",
   "author": {
     "name": "David Mosiah",
