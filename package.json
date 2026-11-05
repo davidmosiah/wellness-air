@@ -29,14 +29,15 @@
     "test:air-trend": "node scripts/test-air-trend.mjs",
     "test:providers": "node scripts/provider-contract-test.mjs",
     "test:demo-contract": "node scripts/demo-contract-test.mjs",
-    "test": "npm run typecheck && npm run build && npm run smoke && npm run test:metadata && npm run test:air-trend && npm run test:providers && npm run test:demo-contract && npm run test:skill-surface && npm run test:input-limits && npm run test:profile-boundaries && npm run test:profile-storage && npm run test:http-local-only && npm run test:release-metadata",
+    "test": "npm run typecheck && npm run build && npm run smoke && npm run test:metadata && npm run test:air-trend && npm run test:providers && npm run test:demo-contract && npm run test:skill-surface && npm run test:input-limits && npm run test:profile-boundaries && npm run test:profile-storage && npm run test:http-local-only && npm run test:release-metadata && npm run test:agent-plugin",
     "prepublishOnly": "npm test",
     "test:skill-surface": "node scripts/test-skill-surface.mjs",
     "test:input-limits": "node scripts/input-limits-test.mjs",
     "test:profile-boundaries": "node scripts/test-profile-boundaries.mjs",
     "test:profile-storage": "node scripts/test-profile-storage.mjs",
     "test:http-local-only": "node scripts/test-http-local-only.mjs",
-    "test:release-metadata": "node scripts/test-release-metadata.mjs"
+    "test:release-metadata": "node scripts/test-release-metadata.mjs",
+    "test:agent-plugin": "node scripts/test-agent-plugin.mjs"
   },
   "engines": {
     "node": ">=20"

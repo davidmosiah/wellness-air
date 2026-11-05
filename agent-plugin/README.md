@@ -19,8 +19,8 @@ Requires Node.js 20+ (`npx` on PATH). The skill loads as `wellness-air:wellness-
 npx -y wellness-air@0.7.3 doctor
 ```
 
-Public sensors need no setup: find a sensor with air_search_public_sensors (or on airgradient.com/map) and pass its locationId. Owned sensors need the provider token in the user's environment before Hermes starts (see the connector README).
+Public sensors need no setup: find a sensor with air_search_public_sensors (or on airgradient.com/map) and pass its locationId. Owned sensors need provider credentials in the user's environment before Hermes starts: `AIRGRADIENT_API_TOKEN`, `AIRTHINGS_CLIENT_ID` together with `AIRTHINGS_CLIENT_SECRET`, or `PURPLEAIR_API_KEY`. The plugin explicitly forwards only these optional credentials; unset or empty values are omitted by Hermes. Public AirGradient reads still need no key.
 
 ## Disclosure
 
-Runs the `wellness-air@0.7.3` npm package locally over stdio through `npx` (Node.js 20+ required); the package is downloaded from npm on first start. Data source: public AirGradient sensors (no key) and, optionally, the user's own AirGradient, Airthings, PurpleAir, IQAir or Awair account through provider tokens. Tools that change state: air_profile_update (local preferences only). Air-quality guidance is general wellness information, not a medical or safety alert system. The tool set comes from the pinned npm version, not from this repository's source tree.
+Runs the `wellness-air@0.7.3` npm package locally over stdio through `npx` (Node.js 20+ required); the package is downloaded from npm on first start. Data source: public AirGradient sensors (no key) and, optionally, the user's own AirGradient, AirThings or PurpleAir account through provider credentials. IQAir AirVisual and Awair are on the roadmap and are not available through this plugin. Tools that change state: air_profile_update (local preferences only). Air-quality guidance is general wellness information, not a medical or safety alert system. The tool set comes from the pinned npm version, not from this repository's source tree.

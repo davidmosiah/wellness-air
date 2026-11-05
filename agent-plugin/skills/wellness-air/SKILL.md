@@ -6,7 +6,7 @@ description: >-
 
 # Wellness Air
 
-MCP server `wellness-air` from the `wellness-air@0.7.3` npm package, run locally through `npx`. It reads PM2.5, PM10, CO2, TVOC, NOx, temperature, humidity, AQI bands, trends and health recommendations. Data source: public AirGradient sensors (no key) and, optionally, the user's own AirGradient, Airthings, PurpleAir, IQAir or Awair account through provider tokens.
+MCP server `wellness-air` from the `wellness-air@0.7.3` npm package, run locally through `npx`. It reads PM2.5, PM10, CO2, TVOC, NOx, temperature, humidity, AQI bands, trends and health recommendations. Data source: public AirGradient sensors (no key) and, optionally, the user's own AirGradient, AirThings or PurpleAir account through provider credentials. IQAir AirVisual and Awair are on the roadmap and are not available through this plugin.
 
 ## Workflow
 
@@ -19,7 +19,7 @@ MCP server `wellness-air` from the `wellness-air@0.7.3` npm package, run locally
 npx -y wellness-air@0.7.3 doctor
 ```
 
-Public sensors need no setup: find a sensor with air_search_public_sensors (or on airgradient.com/map) and pass its locationId. Owned sensors need the provider token in the user's environment before Hermes starts (see the connector README).
+Public sensors need no setup: find a sensor with air_search_public_sensors (or on airgradient.com/map) and pass its locationId. Owned sensors need provider credentials in the user's environment before Hermes starts: `AIRGRADIENT_API_TOKEN`, `AIRTHINGS_CLIENT_ID` together with `AIRTHINGS_CLIENT_SECRET`, or `PURPLEAIR_API_KEY`. The plugin explicitly forwards only these optional credentials; unset or empty values are omitted by Hermes. Public AirGradient reads still need no key.
 
 ## Safety
 
